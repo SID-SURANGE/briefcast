@@ -14,6 +14,8 @@ class Source(Base):
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     feed_url: Mapped[str] = mapped_column(String, nullable=False)
     tier: Mapped[int] = mapped_column(Integer, nullable=False)
+    # "rss" | "arxiv_api"
+    feed_type: Mapped[str] = mapped_column(String(16), nullable=False)
     # "verified-official" | "verify-before-enabling" | "optional-connector" | "excluded"
     classification: Mapped[str] = mapped_column(String(32), nullable=False)
     # "summary_metadata" | "abstract_metadata" | "processed_discard"
