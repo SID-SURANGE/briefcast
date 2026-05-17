@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     database_url: str = ""
     langchain_api_key: str = ""
-    langchain_project: str = "groundtruth-dev"
+    langchain_project: str = "briefcast-dev"
     langchain_tracing_v2: str = "false"
     dedup_threshold: float = 0.92
 

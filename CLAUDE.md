@@ -256,7 +256,7 @@ NOMIC_API_KEY             # embedding service (free tier)
 TELEGRAM_BOT_TOKEN        # delivery + alert channel
 DATABASE_URL              # injected by Railway Postgres service
 LANGCHAIN_API_KEY         # LangSmith tracing
-LANGCHAIN_PROJECT         # e.g. "groundtruth-dev"
+LANGCHAIN_PROJECT         # e.g. "briefcast-dev"
 LANGCHAIN_TRACING_V2      # set to "true"
 DEDUP_THRESHOLD           # default 0.92 — tunable without code change
 ```
@@ -307,7 +307,7 @@ Three separate concerns. Keep them separate.
 ```
 LANGCHAIN_TRACING_V2=true
 LANGCHAIN_API_KEY=<from langsmith.com>
-LANGCHAIN_PROJECT=groundtruth-dev
+LANGCHAIN_PROJECT=briefcast-dev
 ```
 Free tier: 5,000 traces/month — sufficient for personal use.
 Auto-traces all LangChain LCEL chains. Use LangSmith Playground for prompt iteration.
@@ -381,7 +381,7 @@ query rewriting · frontend · user auth · Slack · local embedding model · Ti
 ## File Structure
 
 ```
-groundtruth/
+briefcast/
 ├── CLAUDE.md                   ← this file
 ├── POLICY.md                   ← public ingestion + storage policy for GitHub readers
 ├── README.md
