@@ -231,7 +231,7 @@ Query Handler (FastAPI, always-on — Telegram webhook or polling)
 |---|---|---|---|
 | Per-article summarisation | `google/gemini-2.5-flash` | OpenRouter | Lowest hallucination rate on summarisation benchmarks. ~$0.50/M input. 1M context. |
 | Daily briefing composition | `claude-haiku-4-5` | OpenRouter | Writing quality and tone matter for daily reading. Haiku beats Gemini Flash in blind evals. $1/M input. |
-| RAG query responses | `claude-sonnet-4-6` | Anthropic direct or OpenRouter | Multi-source grounded reasoning with citation. Hallucination risk is highest here. Sonnet justified. |
+| RAG query responses | `claude-sonnet-4-6` | OpenRouter | Multi-source grounded reasoning with citation. Hallucination risk is highest here. Sonnet justified. |
 
 **Why not Gemini Flash for briefing composition:**
 In blind writing quality evaluations, Claude output is preferred ~47% of the time vs Gemini's ~24%.
@@ -246,12 +246,10 @@ Local embeddings are the right v2 upgrade if you self-host or move to a memory-r
 
 OpenRouter provides a single API key and unified billing across all model providers.
 Model swaps require one parameter change — no code changes.
-`OPENROUTER_API_KEY` is the primary key. `ANTHROPIC_API_KEY` is kept as optional direct override.
 
 **Env vars (all via Railway environment variables — never in source code):**
 ```
 OPENROUTER_API_KEY        # primary LLM gateway
-ANTHROPIC_API_KEY         # optional direct override for RAG responses
 NOMIC_API_KEY             # embedding service (free tier)
 TELEGRAM_BOT_TOKEN        # delivery + alert channel
 DATABASE_URL              # injected by Railway Postgres service
@@ -265,7 +263,6 @@ DEDUP_THRESHOLD           # default 0.92 — tunable without code change
 
 | Account | Plan | Cost/mo |
 |---|---|---|
-| Anthropic Claude.ai | Pro | $20 (covers Claude Code dev) |
 | OpenRouter | Pay-as-you-go | ~$2–3 (Gemini Flash + Haiku + Sonnet RAG) |
 | Railway | Hobby | ~$5 (API + worker + Postgres) |
 | Telegram | Free | $0 |
@@ -273,7 +270,7 @@ DEDUP_THRESHOLD           # default 0.92 — tunable without code change
 | Nomic API | Free | $0 (1M tokens/month) |
 | GitHub | Free | $0 |
 
-**Total: ~$27–28/month.** Log every API call from day one. Run `scripts/cost_report.py` weekly.
+**App running cost: ~$7–8/month.** Claude Code (Claude.ai Pro, $20/month) is a development tool — cancel it once the app is stable. Log every API call from day one. Run `scripts/cost_report.py` weekly.
 
 ---
 
@@ -338,7 +335,7 @@ Langfuse or Helicone for richer cost dashboard · OpenTelemetry → Cloud Trace 
 | Web framework | FastAPI | Telegram webhook handler + `/healthz` |
 | ORM | SQLAlchemy 2.x + Alembic | Migrations from day 1 |
 | Scheduling | APScheduler (in-process) | No separate service needed in v1 |
-| LLM gateway | OpenRouter (primary) | `ANTHROPIC_API_KEY` as optional direct override |
+| LLM gateway | OpenRouter | Single key for all models (Gemini Flash + Haiku + Sonnet) |
 | RAG chains | LangChain LCEL only | Composable + LangSmith-native tracing |
 | Text splitting | LangChain RecursiveCharacterTextSplitter | chunk_size=800, overlap=100 |
 | Embeddings | Nomic API — `nomic-embed-text-v1.5` | Free tier (1M tokens/month). Local via sentence-transformers is v2. |

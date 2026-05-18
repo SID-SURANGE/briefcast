@@ -5,7 +5,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     openrouter_api_key: str = ""
-    anthropic_api_key: str = ""
     nomic_api_key: str = ""
     telegram_bot_token: str = ""
     database_url: str = ""

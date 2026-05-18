@@ -91,7 +91,7 @@ Work from top to bottom. Each phase builds on the previous one.
 ## Phase 6 — RAG query-back
 
 - [ ] Implement `app/rag/retriever.py` — `retrieve(query_embedding, k=10)`; metadata filter: `published_at >= now() - 14 days`; pgvector cosine search
-- [ ] Implement `app/rag/responder.py` — Claude Sonnet via Anthropic direct or OpenRouter; grounded answer + inline citations; wrap with LangChain LCEL for LangSmith tracing
+- [ ] Implement `app/rag/responder.py` — Claude Sonnet via OpenRouter; grounded answer + inline citations; wrap with LangChain LCEL for LangSmith tracing
 - [ ] Wire Telegram `handle_query()` → embed query → retrieve → respond → reply
 - [ ] Write `tests/test_retriever.py` (stubs already exist)
 - [ ] Add `LANGCHAIN_API_KEY`, `LANGCHAIN_TRACING_V2=true`, `LANGCHAIN_PROJECT` to `.env`

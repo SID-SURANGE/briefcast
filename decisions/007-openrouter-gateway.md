@@ -1,13 +1,17 @@
-# ADR 007: OpenRouter as primary LLM gateway
+# ADR 007: OpenRouter as sole LLM gateway
 
 ## Status
 Accepted
 
 ## Context
-The pipeline uses three models from two providers. Managing separate API keys and billing is operational overhead.
+The pipeline uses three models: Gemini Flash (summarisation), Claude Haiku (briefing), Claude Sonnet (RAG).
+Managing separate API keys per provider adds billing and platform overhead for a personal tool.
 
 ## Decision
-Route all LLM calls through OpenRouter. ANTHROPIC_API_KEY kept as optional direct override for RAG responses.
+Route all LLM calls through OpenRouter with a single `OPENROUTER_API_KEY`.
+No direct Anthropic API key — OpenRouter already provides access to Claude Sonnet.
 
 ## Consequences
-Single API key and unified billing. Model swaps require one parameter change, no code changes.
+Single API key, single billing account, unified model access.
+Model swaps require one parameter change, no code changes.
+Estimated LLM cost: ~$2–3/month at personal use volume.
