@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ---
 
 # Briefcast — personal AI intelligence briefing agent + RAG query-back
-**CLAUDE.md · v1.0 · 2026-05-17**
+**CLAUDE.md · v1.1 · 2026-05-18**
 
 Read this fully at the start of every Claude Code session before writing any code.
 Lines marked `[VERIFY]` must be tested live before the connector is enabled.
@@ -26,6 +26,49 @@ This repo is open-source. Every decision must be safe for public GitHub.
 **One-line description:** A self-hosted pipeline that ingests AI ecosystem updates via RSS/APIs,
 deduplicates and ranks them (Google-first), delivers a daily briefing via Telegram,
 and answers grounded follow-up questions over a rolling 14-day corpus.
+
+---
+
+## Current State & Next Steps
+
+> **Keep this section current.** Update it at the end of every session or after every feature lands.
+> Claude reads this first — an accurate status here avoids redundant codebase exploration.
+
+### What is built and working (as of 2026-05-18)
+
+| Layer | File(s) | Status |
+|---|---|---|
+| Config | `app/config.py` | ✅ pydantic-settings, all env vars, DEDUP_THRESHOLD |
+| DB session | `app/db.py` | ✅ SQLAlchemy engine + `get_db()` |
+| Models | `app/models/article.py`, `source.py`, `base.py` | ✅ full schema with pgvector, soft-delete |
+| Migrations | `alembic/versions/0001_*`, `0002_*` | ✅ applied; pgvector extension + both tables |
+| API server | `app/main.py` | ✅ FastAPI + `/healthz` → 200 |
+| Observability | `app/observability/logger.py` | ✅ structlog scaffold (verify field coverage) |
+| RSS + arXiv fetcher | `app/ingestion/fetcher.py` | ✅ `fetch_rss()` feedparser+httpx; `fetch_arxiv()` Atom XML |
+| Deduplication | `app/ingestion/dedup.py` | ✅ L1 SHA-256 hash; L2 cosine (numpy); `is_duplicate(url, embedding, db)` |
+| Embedder | `app/processing/embedder.py` | ✅ Nomic API; `embed()` + `embed_batch()`; task_type param |
+| Circuit breaker | `app/ingestion/circuit_breaker.py` | ✅ 3-strike → `degraded` on Source row; `record_success/failure/is_open(name, db)` |
+| Summariser | `app/processing/summariser.py` | ✅ Gemini Flash via OpenRouter; `summarise(title, abstract, source)`; cost logged |
+| Observability | `app/observability/logger.py` | ✅ `configure_logging()` JSON structlog; `log_llm_call()` with all required fields |
+| Local env | `.venv`, docker compose db, alembic | ✅ running on localhost:8000 |
+
+### What exists as stubs (not yet implemented)
+
+| File | What it needs |
+|---|---|
+| `app/ranking/ranker.py` | `score = (tier_weight×0.35) + (recency×0.35) + (novelty×0.30)` |
+| `app/briefing/composer.py` | Haiku via OpenRouter; top 6–8 items; citations mandatory |
+| `app/rag/retriever.py` | pgvector cosine search; 14-day metadata filter; k=10 |
+| `app/rag/responder.py` | Sonnet via OpenRouter; grounded answer + inline citations |
+| `app/delivery/telegram_bot.py` | python-telegram-bot; briefing send + alert send + webhook handler |
+| `app/worker.py` | APScheduler jobs: ingest (every 6h), briefing (08:00 UTC); calls fetcher→dedup→embed→summarise |
+| `tests/test_dedup.py` | L1 and L2 dedup unit tests |
+| `tests/test_ranker.py` | Scorer unit tests with known inputs |
+| `tests/test_retriever.py` | pgvector retrieval integration test |
+
+### Recommended next step
+
+**Implement `app/ranking/ranker.py` then `app/worker.py`** — ranker is a pure function (easy to unit-test); worker wires everything built so far into a runnable end-to-end ingest job. After worker runs successfully once, move to `composer.py` → `telegram_bot.py` → `retriever.py` + `responder.py`.
 
 ---
 
@@ -256,7 +299,7 @@ DATABASE_URL              # injected by Railway Postgres service
 LANGCHAIN_API_KEY         # LangSmith tracing
 LANGCHAIN_PROJECT         # e.g. "briefcast-dev"
 LANGCHAIN_TRACING_V2      # set to "true"
-DEDUP_THRESHOLD           # default 0.92 — tunable without code change
+DEDUP_THRESHOLD=0.92      # plain number only — pydantic-settings cannot parse inline comments
 ```
 
 ### Budget
@@ -390,7 +433,10 @@ briefcast/
 │   ├── main.py                 ← FastAPI (Telegram webhook handler + /healthz)
 │   ├── worker.py               ← APScheduler entry point
 │   ├── config.py               ← all constants via pydantic-settings; no secrets in code
+│   ├── db.py                   ← SQLAlchemy engine + SessionLocal + get_db()
 │   ├── models/
+│   │   ├── base.py             ← DeclarativeBase
+│   │   ├── __init__.py         ← re-exports Article, Source (ensures Alembic sees all models)
 │   │   ├── article.py          ← url, title, author, source_name, source_tier,
 │   │   │                          published_at, summary, embedding, score,
 │   │   │                          dedup_hash, storage_mode, deleted_at
@@ -419,7 +465,7 @@ briefcast/
 │       └── logger.py           ← structlog setup + cost calculation helpers
 ├── scripts/
 │   └── cost_report.py          ← manual weekly cost aggregation from logs
-├── evals/                      ← add week 3
+├── evals/                      ← scaffold exists; flesh out at v1.5
 │   ├── questions.json          ← 20 Q&A pairs with expected sources + citation check
 │   └── eval_runner.py
 ├── decisions/
@@ -483,9 +529,11 @@ Name RAG stages correctly in ADRs and code comments:
 ## Deployment
 
 ### Local dev
-```bash
-docker-compose up && alembic upgrade head
-python -m app.worker   # manual trigger for testing
+```powershell
+docker compose up -d db
+.venv\Scripts\alembic upgrade head
+.venv\Scripts\uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+.venv\Scripts\python -m app.worker   # manual trigger for testing
 ```
 
 ### Railway (v1 platform)
@@ -527,33 +575,64 @@ python -m app.worker   # manual trigger for testing
 
 ## Development Commands
 
-```bash
-# Start all services
-docker-compose up -d
+### First-time local setup (run once after cloning)
+
+```powershell
+# 1. Create virtual environment (Windows — all Python commands use .venv, never global)
+python -m venv .venv
+
+# 2. Install project + dev dependencies into .venv
+.venv\Scripts\pip install -e ".[dev]"
+
+# 3. Copy and fill in credentials
+copy .env.example .env
+# Edit .env — set OPENROUTER_API_KEY, NOMIC_API_KEY, TELEGRAM_BOT_TOKEN,
+# DATABASE_URL, LANGCHAIN_API_KEY, LANGCHAIN_TRACING_V2, LANGCHAIN_PROJECT
+# DEDUP_THRESHOLD=0.92  ← set a plain number, no inline comments
+
+# 4. Start Postgres (pgvector image — pulls on first run)
+docker compose up -d db
+
+# 5. Wait for Postgres to be ready, then apply migrations
+docker exec briefcast-db-1 pg_isready -U briefcast
+.venv\Scripts\alembic upgrade head
+
+# 6. Start the API server
+.venv\Scripts\uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 7. Verify
+# GET http://localhost:8000/healthz  →  {"status": "ok"}
+```
+
+### Day-to-day (existing environment)
+
+```powershell
+# Start only the DB (use when API runs locally, not in Docker)
+docker compose up -d db
 
 # Apply DB migrations
-alembic upgrade head
+.venv\Scripts\alembic upgrade head
 
 # Create a new migration after model changes
-alembic revision --autogenerate -m "description"
+.venv\Scripts\alembic revision --autogenerate -m "description"
 
 # Run all tests
-pytest tests/ -v
+.venv\Scripts\pytest tests/ -v
 
 # Run a single test file
-pytest tests/test_dedup.py -v
+.venv\Scripts\pytest tests/test_dedup.py -v
 
 # Run a single test by name
-pytest tests/test_dedup.py::test_function_name -v
+.venv\Scripts\pytest tests/test_dedup.py::test_function_name -v
 
 # Lint + format check
-ruff check app/ && black --check app/ && isort --check app/
+.venv\Scripts\ruff check app/ && .venv\Scripts\black --check app/ && .venv\Scripts\isort --check app/
 
 # Auto-fix lint
-ruff check --fix app/ && black app/ && isort app/
+.venv\Scripts\ruff check --fix app/ && .venv\Scripts\black app/ && .venv\Scripts\isort app/
 
 # Weekly cost report
-python scripts/cost_report.py
+.venv\Scripts\python scripts/cost_report.py
 ```
 
 ---
@@ -562,11 +641,11 @@ python scripts/cost_report.py
 
 1. Open VS Code from project root — Claude Code extension reads CLAUDE.md automatically
 2. Check `decisions/` for relevant ADRs before any architectural choice
-3. `docker-compose up` → verify DB connection and `pgvector` extension active
-4. `pytest tests/ -v` before making any changes
-5. Schema change → `alembic revision --autogenerate -m "description"`
+3. `docker compose up -d db` → verify DB connection and `pgvector` extension active
+4. `.venv\Scripts\pytest tests/ -v` before making any changes
+5. Schema change → `.venv\Scripts\alembic revision --autogenerate -m "description"`
 6. New source → test URL live + review ToS + assign classification tag + assign storage mode + document in source table above
 
 ---
 
-> **v1.0 | 2026-05-17 | Prune monthly. Every line must change Claude's behaviour or be cut.**
+> **v1.1 | 2026-05-18 | Prune monthly. Every line must change Claude's behaviour or be cut.**
