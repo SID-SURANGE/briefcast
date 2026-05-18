@@ -55,21 +55,21 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
 | Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; `build_application()` with message handler |
 | Config | `app/config.py` | ✅ added `telegram_chat_id` field |
+| RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
+| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; embed→retrieve→generate; inline HTML citations |
+| Tests | `tests/test_dedup.py`, `test_ranker.py`, `test_retriever.py` | ✅ 32/32 passing |
 | Local env | `.venv`, docker compose db, alembic | ✅ running on localhost:8000 |
 
 ### What exists as stubs (not yet implemented)
 
 | File | What it needs |
 |---|---|
-| `app/rag/retriever.py` | pgvector cosine search; 14-day metadata filter; k=10 |
-| `app/rag/responder.py` | Sonnet via OpenRouter; grounded answer + inline citations; `respond(query) -> str` |
-| `tests/test_dedup.py` | L1 and L2 dedup unit tests |
-| `tests/test_ranker.py` | Scorer unit tests with known inputs |
-| `tests/test_retriever.py` | pgvector retrieval integration test |
+| Source seeding | No rows in `sources` table yet — pipeline cannot run without them |
+| `app/main.py` | Telegram webhook route (`POST /telegram`) wired to `build_application()` |
 
 ### Recommended next step
 
-**Implement `app/rag/retriever.py` and `app/rag/responder.py`** — completes the full pipeline. `retriever.py` does pgvector cosine search with 14-day filter; `responder.py` calls Sonnet with retrieved context and mandatory citations. After that: write the three test files to validate dedup, ranker, and retrieval logic.
+**Seed the `sources` table** with Tier 1 + 2 sources and run `python -m app.worker` manually to trigger a first live ingestion. Verify articles appear in DB, scores are set, and the daily briefing fires. After a successful run, add the Telegram webhook route to `main.py`.
 
 ---
 
