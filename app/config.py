@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     nomic_api_key: str = ""
     telegram_bot_token: str = ""
+    telegram_chat_id: str = ""  # your personal chat ID — get it from @userinfobot
     database_url: str = ""
     langchain_api_key: str = ""
     langchain_project: str = "briefcast-dev"

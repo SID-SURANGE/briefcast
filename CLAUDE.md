@@ -50,25 +50,26 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Circuit breaker | `app/ingestion/circuit_breaker.py` | ✅ 3-strike → `degraded` on Source row; `record_success/failure/is_open(name, db)` |
 | Summariser | `app/processing/summariser.py` | ✅ Gemini Flash via OpenRouter; `summarise(title, abstract, source)`; cost logged |
 | Observability | `app/observability/logger.py` | ✅ `configure_logging()` JSON structlog; `log_llm_call()` with all required fields |
+| Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
+| Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` (6h) → `run_ranking()`; `run_briefing()` (08:00 UTC) |
+| Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
+| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; `build_application()` with message handler |
+| Config | `app/config.py` | ✅ added `telegram_chat_id` field |
 | Local env | `.venv`, docker compose db, alembic | ✅ running on localhost:8000 |
 
 ### What exists as stubs (not yet implemented)
 
 | File | What it needs |
 |---|---|
-| `app/ranking/ranker.py` | `score = (tier_weight×0.35) + (recency×0.35) + (novelty×0.30)` |
-| `app/briefing/composer.py` | Haiku via OpenRouter; top 6–8 items; citations mandatory |
 | `app/rag/retriever.py` | pgvector cosine search; 14-day metadata filter; k=10 |
-| `app/rag/responder.py` | Sonnet via OpenRouter; grounded answer + inline citations |
-| `app/delivery/telegram_bot.py` | python-telegram-bot; briefing send + alert send + webhook handler |
-| `app/worker.py` | APScheduler jobs: ingest (every 6h), briefing (08:00 UTC); calls fetcher→dedup→embed→summarise |
+| `app/rag/responder.py` | Sonnet via OpenRouter; grounded answer + inline citations; `respond(query) -> str` |
 | `tests/test_dedup.py` | L1 and L2 dedup unit tests |
 | `tests/test_ranker.py` | Scorer unit tests with known inputs |
 | `tests/test_retriever.py` | pgvector retrieval integration test |
 
 ### Recommended next step
 
-**Implement `app/ranking/ranker.py` then `app/worker.py`** — ranker is a pure function (easy to unit-test); worker wires everything built so far into a runnable end-to-end ingest job. After worker runs successfully once, move to `composer.py` → `telegram_bot.py` → `retriever.py` + `responder.py`.
+**Implement `app/rag/retriever.py` and `app/rag/responder.py`** — completes the full pipeline. `retriever.py` does pgvector cosine search with 14-day filter; `responder.py` calls Sonnet with retrieved context and mandatory citations. After that: write the three test files to validate dedup, ranker, and retrieval logic.
 
 ---
 
@@ -295,6 +296,7 @@ Model swaps require one parameter change — no code changes.
 OPENROUTER_API_KEY        # primary LLM gateway
 NOMIC_API_KEY             # embedding service (free tier)
 TELEGRAM_BOT_TOKEN        # delivery + alert channel
+TELEGRAM_CHAT_ID          # personal chat ID — send /start to @userinfobot to get it
 DATABASE_URL              # injected by Railway Postgres service
 LANGCHAIN_API_KEY         # LangSmith tracing
 LANGCHAIN_PROJECT         # e.g. "briefcast-dev"
