@@ -1,3 +1,4 @@
+import re
 import time
 from datetime import date
 from typing import Any
@@ -70,6 +71,26 @@ def _build_user_prompt(articles: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+_TELEGRAM_INLINE_TAGS = ["b", "i", "u", "s", "code", "pre"]
+
+
+def _close_open_tags(text: str) -> str:
+    """Close any inline HTML tags left open by a truncated LLM response."""
+    open_tags: list[str] = []
+    for m in re.finditer(r"<(/?)(\w+)[^>]*>", text):
+        closing, tag = m.group(1), m.group(2).lower()
+        if tag not in _TELEGRAM_INLINE_TAGS:
+            continue
+        if closing:
+            if open_tags and open_tags[-1] == tag:
+                open_tags.pop()
+        else:
+            open_tags.append(tag)
+    for tag in reversed(open_tags):
+        text += f"</{tag}>"
+    return text
+
+
 async def compose(articles: list[dict[str, Any]]) -> str:
     """
     Select top articles, call Haiku to compose a Telegram-HTML briefing, return the text.
@@ -99,7 +120,7 @@ async def compose(articles: list[dict[str, Any]]) -> str:
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "max_tokens": 800,
+                    "max_tokens": 1600,
                     "temperature": 0.4,
                 },
             )
@@ -126,5 +147,6 @@ async def compose(articles: list[dict[str, Any]]) -> str:
         estimated_cost_usd=cost,
         source="briefing",
     )
+    text = _close_open_tags(text)
     log.info("composer.done", selected=len(selected), latency_ms=round(latency_ms, 1))
     return text
