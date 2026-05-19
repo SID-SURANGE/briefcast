@@ -11,14 +11,18 @@ from app.observability.logger import log_llm_call
 from app.processing.embedder import embed
 from app.rag.retriever import retrieve
 
-log = structlog.get_logger()
+log = structlog.get_logger(__name__)
 
 # LangChain reads tracing config from os.environ directly.
 # pydantic-settings populates our Settings object but does not write to os.environ,
 # so we bridge the two here at import time.
-os.environ.setdefault("LANGCHAIN_TRACING_V2", settings.langchain_tracing_v2)
-os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
-os.environ.setdefault("LANGCHAIN_PROJECT", settings.langchain_project)
+# Only enable tracing when a key is present — prevents 403 noise when unset.
+_tracing_enabled = bool(settings.langsmith_api_key and settings.langsmith_tracing == "true")
+os.environ.setdefault("LANGSMITH_TRACING", "true" if _tracing_enabled else "false")
+os.environ.setdefault("LANGSMITH_API_KEY", settings.langsmith_api_key)
+os.environ.setdefault("LANGSMITH_PROJECT", settings.langsmith_project)
+os.environ.setdefault("LANGSMITH_ENDPOINT", settings.langsmith_endpoint)
+log.info("responder.tracing", enabled=_tracing_enabled, project=settings.langsmith_project)
 
 _MODEL = "anthropic/claude-sonnet-4-6"
 _COST_PER_INPUT_TOKEN = 3.00 / 1_000_000

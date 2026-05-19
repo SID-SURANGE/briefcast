@@ -315,9 +315,10 @@ NOMIC_API_KEY             # embedding service (free tier)
 TELEGRAM_BOT_TOKEN        # delivery + alert channel
 TELEGRAM_CHAT_ID          # personal chat ID — send /start to @userinfobot to get it
 DATABASE_URL              # injected by Railway Postgres service
-LANGCHAIN_API_KEY         # LangSmith tracing
-LANGCHAIN_PROJECT         # e.g. "briefcast-dev"
-LANGCHAIN_TRACING_V2      # set to "true"
+LANGSMITH_API_KEY         # LangSmith tracing
+LANGSMITH_PROJECT         # e.g. "briefcast-dev"
+LANGSMITH_TRACING         # set to "true"
+LANGSMITH_ENDPOINT        # https://apac.api.smith.langchain.com (APAC) or https://api.smith.langchain.com (US)
 DEDUP_THRESHOLD=0.92      # plain number only — pydantic-settings cannot parse inline comments
 ```
 
@@ -364,14 +365,16 @@ Three separate concerns. Keep them separate.
 
 ### 1. LLM/RAG tracing — LangSmith
 ```
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=<from langsmith.com>
-LANGCHAIN_PROJECT=briefcast-dev
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=<from smith.langchain.com>
+LANGSMITH_PROJECT=briefcast-dev
+LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com   # APAC region — change if on US plan
 ```
 Free tier: 5,000 traces/month — sufficient for personal use.
 **Scope:** Only `app/rag/responder.py` uses LangChain LCEL (`_prompt | _llm`). This is the only layer where per-query trace visibility matters — seeing retrieved context + model response in one view.
 Summariser and briefing composer use raw `httpx` — no LangChain overhead on batch jobs.
 LangSmith env vars are bridged from pydantic-settings → `os.environ` at import time in `responder.py`.
+Tracing is silently disabled if `LANGSMITH_API_KEY` is empty — no 403 noise in dev.
 
 ### 2. Application + cost logging — structlog (JSON only, no print())
 Required fields on every LLM call:

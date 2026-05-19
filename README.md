@@ -145,9 +145,10 @@ Run `scripts/cost_report.py` weekly to aggregate spend by model and task.
 
 ### Required env vars for tracing
 ```
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=<from smith.langchain.com>
-LANGCHAIN_PROJECT=briefcast-dev
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=<from smith.langchain.com>
+LANGSMITH_PROJECT=briefcast-dev
+LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com   # APAC region
 ```
 
 ---
