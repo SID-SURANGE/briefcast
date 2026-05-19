@@ -101,12 +101,50 @@ $env:DATABASE_URL="postgresql+psycopg://..."
 
 ## Step 7 — Seed sources
 
-After migrations, seed the sources table from local (point at Railway DB):
+The seed script verifies all 8 RSS feed URLs are reachable, then upserts them
+into the `sources` table. It only needs to run once after the first deploy (or
+when you add new sources to `registry.py`).
+
+### Get the public database URL
+
+Railway gives you two database URLs:
+- **Internal** (`postgres.railway.internal:5432`) — only reachable from inside Railway containers
+- **Public** (`*.railway.app:<port>` or `*.proxy.rlwy.net:<port>`) — reachable from your laptop
+
+To get the public URL:
+1. In Railway dashboard → click the **Postgres** service
+2. Click the **Variables** tab
+3. Copy the value of `DATABASE_PUBLIC_URL` (not `DATABASE_URL`)
+
+It will look like: `postgresql://postgres:<password>@roundhouse.proxy.rlwy.net:12345/railway`
+
+### Run the seed from your local machine
 
 ```powershell
-$env:DATABASE_URL="postgresql+psycopg://<railway-db-url>"
+# Paste your DATABASE_PUBLIC_URL value here — note the +psycopg driver suffix
+$env:DATABASE_URL="postgresql+psycopg://postgres:<password>@<public-host>:<port>/railway"
 .venv\Scripts\python scripts/seed_sources.py
 ```
+
+Expected output:
+```
+[OK  ] Google AI Blog  —  https://blog.google/technology/ai/rss/
+[OK  ] Google Research Blog  —  https://research.google/blog/rss/
+[OK  ] Google Cloud AI Blog  —  https://cloudblog.withgoogle.com/rss/
+[OK  ] Google DeepMind Blog  —  https://deepmind.google/blog/rss.xml
+[OK  ] OpenAI News  —  https://openai.com/news/rss.xml
+[OK  ] Hugging Face Blog  —  https://huggingface.co/blog/feed.xml
+[OK  ] Meta AI Blog  —  https://engineering.fb.com/feed/
+[SKIP VERIFY] arXiv cs.AI + cs.LG  (verified-official API)
+
+8/8 sources reachable
+
+DB sync: 8 inserted, 0 updated
+sources table now has 8 row(s)
+```
+
+After this, the `sources` table in your Railway Postgres has all 8 sources and
+the worker can start ingesting.
 
 ---
 
@@ -127,25 +165,44 @@ https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 
 ---
 
-## Step 9 — Verify the deployment
+## Step 9 — Run first ingestion against Railway DB
 
+The Railway worker will ingest on its own schedule (every 6h), but run it
+manually now so articles are in the DB before the first scheduled briefing.
+
+```powershell
+# Use the public DB URL with +psycopg driver suffix
+$env:DATABASE_URL="postgresql+psycopg://postgres:<password>@<public-host>:<port>/railway"
+.venv\Scripts\python scripts/run_ingestion_once.py
 ```
-# Health check
-GET https://<RAILWAY_DOMAIN>/healthz
+
+Let it run to completion — takes 5–10 minutes for all 8 sources. You'll see
+`worker.source_done` log lines for each source, then `ranker.done` at the end.
+
+---
+
+## Step 10 — Verify end-to-end
+
+```powershell
+# 1. Health check — confirms API is up
+# Open in browser: https://<RAILWAY_DOMAIN>/healthz
 # Expected: {"status": "ok"}
 
-# Trigger a one-shot briefing to verify end-to-end (from local, pointing at Railway DB)
-$env:DATABASE_URL="postgresql+psycopg://<railway-db-url>"
+# 2. Trigger a one-shot briefing to verify Telegram delivery
+$env:DATABASE_URL="postgresql+psycopg://postgres:<password>@<public-host>:<port>/railway"
 .venv\Scripts\python -c "
 import asyncio
 from app.observability.logger import configure_logging
 from app.worker import run_briefing
 configure_logging()
 asyncio.run(run_briefing())
+print('Done.')
 "
 ```
 
-A Telegram message should arrive in your chat within ~30 seconds.
+A Telegram message should arrive in your chat within ~30 seconds. If you see
+`worker.briefing_no_articles` in the logs, ingestion (Step 9) didn't complete
+or no articles fell within the 14-day window.
 
 ---
 
@@ -153,9 +210,9 @@ A Telegram message should arrive in your chat within ~30 seconds.
 
 | Job | UTC | IST |
 |---|---|---|
-| Ingestion (fetch + dedup + summarise + embed) | every 6h starting 00:00 | 05:30, 11:30, 17:30, 23:30 |
+| Ingestion (fetch + dedup + summarise + embed) | every 6h: 00:00, 06:00, 12:00, 18:00 | 05:30, 11:30, 17:30, 23:30 |
 | Ranking | runs after each ingestion | same |
-| Daily briefing | 03:30 | 09:00 |
+| Daily briefing | 07:30 | 13:00 |
 
 ---
 
