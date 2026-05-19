@@ -1,7 +1,9 @@
+import os
 import time
 
-import httpx
 import structlog
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 
 from app.config import settings
 from app.db import SessionLocal
@@ -11,9 +13,14 @@ from app.rag.retriever import retrieve
 
 log = structlog.get_logger()
 
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_MODEL = "anthropic/claude-sonnet-4-6"
+# LangChain reads tracing config from os.environ directly.
+# pydantic-settings populates our Settings object but does not write to os.environ,
+# so we bridge the two here at import time.
+os.environ.setdefault("LANGCHAIN_TRACING_V2", settings.langchain_tracing_v2)
+os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
+os.environ.setdefault("LANGCHAIN_PROJECT", settings.langchain_project)
 
+_MODEL = "anthropic/claude-sonnet-4-6"
 _COST_PER_INPUT_TOKEN = 3.00 / 1_000_000
 _COST_PER_OUTPUT_TOKEN = 15.00 / 1_000_000
 
@@ -27,6 +34,22 @@ _SYSTEM_PROMPT = (
     "- Do not mention that you are using a corpus or context — answer naturally."
 )
 
+# LCEL chain: prompt → Sonnet via OpenRouter.
+# When LANGCHAIN_TRACING_V2=true this chain is automatically traced in LangSmith,
+# capturing the full prompt (with retrieved context), token usage, and latency.
+_llm = ChatOpenAI(
+    model=_MODEL,
+    openai_api_key=settings.openrouter_api_key,
+    openai_api_base="https://openrouter.ai/api/v1",
+    max_tokens=800,
+    temperature=0.1,
+    default_headers={"HTTP-Referer": "https://github.com/briefcast"},
+)
+
+_prompt = ChatPromptTemplate.from_messages([
+    ("system", _SYSTEM_PROMPT),
+    ("human", "Context:\n{context}\n\nQuestion: {query}"),
+])
 
 def _build_context_block(articles: list[dict]) -> str:
     if not articles:
@@ -43,9 +66,15 @@ def _build_context_block(articles: list[dict]) -> str:
 
 async def respond(query: str) -> str:
     """
-    Embed the query, retrieve relevant articles, call Sonnet for a grounded answer.
+    Embed query → retrieve from pgvector → generate grounded answer via LCEL chain.
+
+    The prompt | llm chain is traced end-to-end in LangSmith (full prompt with
+    retrieved context, token counts, latency). Embedding and retrieval steps are
+    logged via structlog.
+
     Returns Telegram-HTML formatted text with inline citations.
     """
+    # Embed + retrieve — explicit steps, logged via structlog
     query_embedding = await embed(query, task_type="search_query")
 
     db = SessionLocal()
@@ -55,40 +84,21 @@ async def respond(query: str) -> str:
         db.close()
 
     context_block = _build_context_block(articles)
-    user_prompt = f"Context:\n{context_block}\n\nQuestion: {query}"
 
+    # LCEL chain — traced in LangSmith automatically
     t0 = time.monotonic()
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                _OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://github.com/briefcast",
-                },
-                json={
-                    "model": _MODEL,
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "max_tokens": 800,
-                    "temperature": 0.1,
-                },
-            )
-            response.raise_for_status()
-    except httpx.HTTPError as exc:
-        log.error("responder.http_error", error=str(exc))
-        raise
-
+    ai_message = await (_prompt | _llm).ainvoke({
+        "context": context_block,
+        "query": query,
+    })
     latency_ms = (time.monotonic() - t0) * 1000
-    data = response.json()
-    answer: str = data["choices"][0]["message"]["content"].strip()
 
-    usage = data.get("usage", {})
-    input_tokens: int = usage.get("prompt_tokens", 0)
-    output_tokens: int = usage.get("completion_tokens", 0)
+    answer: str = ai_message.content
+
+    # Cost logging via structlog — feeds cost_report.py
+    usage = getattr(ai_message, "usage_metadata", None) or {}
+    input_tokens: int = usage.get("input_tokens", 0)
+    output_tokens: int = usage.get("output_tokens", 0)
     cost = input_tokens * _COST_PER_INPUT_TOKEN + output_tokens * _COST_PER_OUTPUT_TOKEN
 
     log_llm_call(

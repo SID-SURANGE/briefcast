@@ -144,6 +144,10 @@ At this scale (two cron jobs, one user), a separate queue service (Celery + Redi
 
 Separation of failure domains. If the worker OOMs on a large ingestion cycle (embedding 200 articles sequentially), the FastAPI webhook handler — which handles incoming Telegram messages — stays alive. If they shared a process, a runaway worker job would make the bot unresponsive. The two services also have different scaling profiles: the API needs low-latency always-on availability; the worker needs burst memory during ingestion cycles.
 
+**Q: LangChain is in the dependencies — where is it actually used?**
+
+Only in `app/rag/responder.py`. The RAG query path is implemented as a LangChain LCEL chain (`_prompt | _llm | StrOutputParser()`), which gives automatic LangSmith tracing of the full prompt → generation step. Everything else — summarisation, briefing composition, embedding — uses raw `httpx`. LangChain would add abstraction overhead to batch jobs (summariser runs 50–200 times per ingestion cycle) without adding any value over a direct API call. The LCEL chain is justified only where per-query trace visibility matters: seeing exactly what context was retrieved and fed to the model for a given user question.
+
 **Q: Why not LangGraph in v1?**
 
 LangGraph is justified when the pipeline has *real* conditional branching that requires a stateful graph — for example: query → classify intent → if retrieval-needed branch to RAG else branch to direct LLM → validate citation quality → if low quality retry with different retrieval. In v1, every path is linear and deterministic: embed → retrieve → generate. Adding LangGraph would add a dependency, a learning curve, and graph state management overhead for zero architectural benefit. It becomes the right tool when the query agent needs a validator node and retry loop.

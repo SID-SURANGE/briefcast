@@ -104,7 +104,7 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 | LLM gateway | OpenRouter | One API key for all models — swap with one param change |
 | Delivery | python-telegram-bot ≥21 | Webhook + long-poll modes supported |
 | Ingestion | feedparser + httpx | RSS/Atom + arXiv Atom API |
-| Observability | structlog (JSON) + LangSmith | Structured cost logging + full RAG trace |
+| Observability | structlog (JSON) + LangSmith | Structured cost logging + full RAG trace via LangChain LCEL |
 | Deployment | Railway | API service + Worker service + Postgres |
 
 ---
@@ -118,6 +118,37 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 | RAG query answers | `claude-sonnet-4-6` | Multi-source grounded reasoning with citation risk. Quality is non-negotiable here. |
 
 All models are routed through **OpenRouter** — unified billing, no per-provider API keys, model swaps require one parameter change.
+
+---
+
+## 🔭 Observability
+
+Two separate concerns, kept separate by design:
+
+### LangSmith — RAG tracing
+The RAG query path (`app/rag/responder.py`) is built as a **LangChain LCEL chain** (`prompt | llm | parser`). When `LANGCHAIN_TRACING_V2=true`, every query is traced end-to-end in [LangSmith](https://smith.langchain.com):
+
+- Full prompt sent to Sonnet (including all retrieved context articles)
+- Token counts and latency per call
+- Retrieved document visibility — see exactly what context the model saw
+
+LangSmith is the only layer using LangChain. The summariser and briefing composer use raw `httpx` — no overhead for batch jobs that don't need per-call trace visibility.
+
+### structlog — cost logging
+Every LLM call logs to structured JSON:
+```python
+log.info("llm.call", model=model, task="summarise|briefing|rag",
+         input_tokens=n, output_tokens=n, latency_ms=n,
+         estimated_cost_usd=n, source=source_name)
+```
+Run `scripts/cost_report.py` weekly to aggregate spend by model and task.
+
+### Required env vars for tracing
+```
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=<from smith.langchain.com>
+LANGCHAIN_PROJECT=briefcast-dev
+```
 
 ---
 

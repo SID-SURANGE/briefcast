@@ -369,7 +369,9 @@ LANGCHAIN_API_KEY=<from langsmith.com>
 LANGCHAIN_PROJECT=briefcast-dev
 ```
 Free tier: 5,000 traces/month — sufficient for personal use.
-Auto-traces all LangChain LCEL chains. Use LangSmith Playground for prompt iteration.
+**Scope:** Only `app/rag/responder.py` uses LangChain LCEL (`_prompt | _llm`). This is the only layer where per-query trace visibility matters — seeing retrieved context + model response in one view.
+Summariser and briefing composer use raw `httpx` — no LangChain overhead on batch jobs.
+LangSmith env vars are bridged from pydantic-settings → `os.environ` at import time in `responder.py`.
 
 ### 2. Application + cost logging — structlog (JSON only, no print())
 Required fields on every LLM call:
