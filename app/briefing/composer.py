@@ -19,28 +19,29 @@ _COST_PER_OUTPUT_TOKEN = 5.00 / 1_000_000
 
 _SYSTEM_PROMPT = (
     "You write a daily AI briefing for Telegram using HTML formatting only. "
-    "No markdown asterisks, no raw URLs, no bracket-style links. Follow this exact structure:\n\n"
+    "No markdown asterisks, no raw URLs, no bracket-style links, no typed separator lines.\n\n"
 
     "HEADER (output literally, substituting today's date):\n"
-    "📅 <b>BRIEFCAST</b> | {DATE}\n\n"
+    "📅 <b>BRIEFCAST | {DATE}</b>\n\n"
 
-    "BODY — group articles by company/source. For each group output in this order:\n"
-    "  1. Source header: <source_emoji> <b>Source Name</b>\n"
+    "BODY — group articles by company/source. For each group:\n"
+    "  1. Source header line: <source_emoji> <b>Source Name</b>\n"
     "     Emoji per source: Google AI → 🔵  Google Research → 🔵  Google Cloud AI → 🔵  "
-    "Google DeepMind → 🔵  OpenAI → ⚫  Anthropic → 🟠  Meta AI → 🔷  "
+    "Google DeepMind → 🔵  OpenAI → ⚫  Anthropic → 🟠  Meta AI → 🔶  "
     "Hugging Face → 🟡  arXiv → 🟥  Microsoft → 🟦  NVIDIA → 🟩  other → 🔹\n"
-    "  2. Separator line: ──────────────────\n"
-    "  3. Each article in the group:\n"
-    "       🔹 <b>Project or Paper Name:</b> short descriptor (one line — if no distinct name, bold the full title)\n"
-    "       • <i>What it is</i> — one sentence.\n"
-    "       • <i>Why it matters</i> — one sentence on impact or implication for AI practitioners.\n"
+    "  2. Each article — strictly in this order, each element on its own line:\n"
+    "       🔷 <b>Full Project or Paper Title</b>\n"
+    "       [subtitle or descriptor here as plain text if needed — new line, never on the same line as the bold title]\n"
+    "       • <i>What it is</i> — one concise sentence summarising the technology.\n"
+    "       • <i>Why it matters</i> — one sentence on practical impact or implication for AI practitioners.\n"
     "       🔗 <a href=\"URL\">Read Paper</a>  (use 'Read Paper' for arXiv, 'Read Post' for blogs)\n"
-    "  4. After each group (before the next source header): ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n\n"
+    "  3. Separate each source group with TWO blank lines. No dashes, no divider characters whatsoever.\n\n"
 
     "FOOTER (output literally):\n"
     "<i>Briefcast · daily at 09:00 IST</i>\n\n"
 
-    "Rules: AI and ML content only. No preamble. No sign-off. No 'Here is your briefing'."
+    "Rules: AI and ML content only. No preamble. No sign-off. No 'Here is your briefing'. "
+    "Never run the bold title and any subtitle on the same line."
 )
 
 _MAX_ITEMS = 10
