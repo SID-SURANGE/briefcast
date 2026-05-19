@@ -1,11 +1,17 @@
 import structlog
-from telegram import Bot, Update
+from telegram import Bot, BotCommand, Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from app.config import settings
 
 log = structlog.get_logger()
+
+_COMMANDS = [
+    BotCommand("ask", "Query your 14-day AI corpus (RAG)"),
+    BotCommand("chat", "Chat directly with the AI (no corpus)"),
+    BotCommand("help", "Show available commands"),
+]
 
 
 async def send_briefing(text: str) -> None:
@@ -30,30 +36,89 @@ async def send_alert(text: str) -> None:
     log.info("telegram.alert_sent")
 
 
-async def _on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle an incoming Telegram message — RAG query-back entry point."""
-    if update.message is None or not update.message.text:
+async def _cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message is None:
+        return
+    text = (
+        "<b>Briefcast commands</b>\n\n"
+        "/ask <i>your question</i> — search your 14-day AI corpus and answer with citations\n"
+        "/chat <i>your message</i> — talk directly to the AI (no corpus lookup)\n\n"
+        "Plain messages (no command) default to <b>/ask</b>."
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+
+async def _cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /ask <query> — RAG over the 14-day corpus."""
+    if update.message is None:
         return
 
-    query = update.message.text.strip()
-    log.info("telegram.query_received", length=len(query))
+    query = " ".join(context.args or []).strip()
+    if not query:
+        await update.message.reply_text("Usage: /ask <i>your question</i>", parse_mode=ParseMode.HTML)
+        return
 
-    # RAG responder wired in once responder.py is implemented
-    from app.rag.responder import respond  # noqa: PLC0415 — deferred to avoid circular at startup
+    await _run_rag(update, query)
 
+
+async def _cmd_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /chat <message> — direct LLM, no retrieval."""
+    if update.message is None:
+        return
+
+    query = " ".join(context.args or []).strip()
+    if not query:
+        await update.message.reply_text("Usage: /chat <i>your message</i>", parse_mode=ParseMode.HTML)
+        return
+
+    await _run_chat(update, query)
+
+
+async def _on_plain_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Plain messages (no command) default to RAG."""
+    if update.message is None or not update.message.text:
+        return
+    await _run_rag(update, update.message.text.strip())
+
+
+async def _run_rag(update: Update, query: str) -> None:
+    from app.rag.responder import respond  # noqa: PLC0415
+
+    log.info("telegram.rag_query", length=len(query))
     try:
         answer = await respond(query)
-    except NotImplementedError:
-        answer = "Query-back is not yet available."
     except Exception as exc:
-        log.error("telegram.query_error", error=str(exc))
-        answer = "Sorry, something went wrong processing your query."
+        log.error("telegram.rag_error", error=str(exc))
+        answer = "Sorry, something went wrong with the corpus query."
+
+    await update.message.reply_text(answer, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+
+async def _run_chat(update: Update, query: str) -> None:
+    from app.rag.chat_responder import chat  # noqa: PLC0415
+
+    log.info("telegram.chat_query", length=len(query))
+    try:
+        answer = await chat(query)
+    except Exception as exc:
+        log.error("telegram.chat_error", error=str(exc))
+        answer = "Sorry, something went wrong with the chat request."
 
     await update.message.reply_text(answer, parse_mode=ParseMode.HTML)
 
 
 def build_application() -> Application:
-    """Build and return the PTB Application with message handler registered."""
+    """Build and return the PTB Application with all handlers registered."""
     app = Application.builder().token(settings.telegram_bot_token).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_message))
+    app.add_handler(CommandHandler("help", _cmd_help))
+    app.add_handler(CommandHandler("ask", _cmd_ask))
+    app.add_handler(CommandHandler("chat", _cmd_chat))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_plain_message))
     return app
+
+
+async def register_commands() -> None:
+    """Register bot command list with Telegram (shows in the / menu in the app)."""
+    async with Bot(token=settings.telegram_bot_token) as bot:
+        await bot.set_my_commands(_COMMANDS)
+    log.info("telegram.commands_registered")

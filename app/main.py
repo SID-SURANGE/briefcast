@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from telegram import Update
 
 from app.db import get_db
-from app.delivery.telegram_bot import build_application
+from app.delivery.telegram_bot import build_application, register_commands
 
 app = FastAPI(title="briefcast")
 
@@ -14,6 +14,7 @@ _ptb_app = build_application()
 @app.on_event("startup")
 async def _startup() -> None:
     await _ptb_app.initialize()
+    await register_commands()
 
 
 @app.on_event("shutdown")
