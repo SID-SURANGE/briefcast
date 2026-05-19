@@ -11,7 +11,7 @@ from app.observability.logger import log_llm_call
 log = structlog.get_logger()
 
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_MODEL = "anthropic/claude-haiku-4-5-20251001"
+_MODEL = "anthropic/claude-haiku-4-5"
 
 _COST_PER_INPUT_TOKEN = 1.00 / 1_000_000
 _COST_PER_OUTPUT_TOKEN = 5.00 / 1_000_000
