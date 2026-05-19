@@ -22,6 +22,8 @@ from app.ranking.ranker import rank
 
 log = structlog.get_logger()
 
+_ITEM_TIMEOUT_S = 90  # max seconds per article: embed + summarise + embed
+
 
 async def _ingest_source(source_id: int) -> int:
     """Fetch, dedup, summarise and persist articles for one source.
@@ -59,27 +61,41 @@ async def _ingest_source(source_id: int) -> int:
             return 0
 
         new_count = 0
-        for item in items:
+        for idx, item in enumerate(items, start=1):
             try:
                 # L1 check before paying for an embed call
                 h = l1_hash(item["url"])
                 if db.query(Article).filter(Article.dedup_hash == h, Article.deleted_at.is_(None)).first():
+                    log.debug("worker.item_skip_l1", source=source.name, idx=idx, total=len(items))
                     continue
 
-                title_embedding = await embed(item["title"], task_type="search_document")
+                log.info("worker.item_processing", source=source.name, idx=idx, total=len(items), title=item["title"][:80])
 
-                if is_duplicate(item["url"], title_embedding, db):
-                    continue
+                async def _process_item(
+                    _item: dict = item, _storage_mode: str = source.storage_mode, _source_name: str = source.name
+                ) -> tuple[str, list[float]]:
+                    title_embedding = await embed(_item["title"], task_type="search_document")
+                    if is_duplicate(_item["url"], title_embedding, db):
+                        return "", []
+                    if _storage_mode == "abstract_metadata":
+                        summary_text = _item.get("abstract") or _item["title"]
+                    else:
+                        summary_text = await summarise(
+                            _item["title"], _item.get("abstract") or _item["title"], _source_name
+                        )
+                    summary_embedding = await embed(summary_text, task_type="search_document")
+                    return summary_text, summary_embedding
 
-                # Mode B (arXiv): store abstract directly; Mode A: generate summary
-                if source.storage_mode == "abstract_metadata":
-                    summary_text = item.get("abstract") or item["title"]
-                else:
-                    summary_text = await summarise(
-                        item["title"], item.get("abstract") or item["title"], source.name
+                try:
+                    summary_text, summary_embedding = await asyncio.wait_for(
+                        _process_item(), timeout=_ITEM_TIMEOUT_S
                     )
+                except asyncio.TimeoutError:
+                    log.warning("worker.item_timeout", source=source.name, idx=idx, url=item.get("url"))
+                    continue
 
-                summary_embedding = await embed(summary_text, task_type="search_document")
+                if not summary_text:
+                    continue
 
                 article = Article(
                     url=item["url"],

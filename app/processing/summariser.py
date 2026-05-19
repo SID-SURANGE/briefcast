@@ -43,7 +43,7 @@ async def summarise(title: str, abstract: str, source_name: str) -> str:
 
     t0 = time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 _OPENROUTER_URL,
                 headers={
