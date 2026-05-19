@@ -18,27 +18,29 @@ _COST_PER_INPUT_TOKEN = 1.00 / 1_000_000
 _COST_PER_OUTPUT_TOKEN = 5.00 / 1_000_000
 
 _SYSTEM_PROMPT = (
-    "You write a sharp daily AI briefing in Telegram HTML. Follow this exact structure:\n\n"
+    "You write a daily AI briefing for Telegram using HTML formatting only. "
+    "No markdown asterisks, no raw URLs, no bracket-style links. Follow this exact structure:\n\n"
 
-    "HEADER (output this literally, substituting today's date):\n"
-    "📡 <b>AI Briefing</b> · {DATE}\n"
-    "━━━━━━━━━━━━━━━━━━━\n\n"
+    "HEADER (output literally, substituting today's date):\n"
+    "📅 <b>BRIEFCAST</b> | {DATE}\n\n"
 
-    "BODY — group items by company/source. For each group:\n"
-    "  - One header line: <emoji> <b>Source Name</b>\n"
-    "  - Use these emoji per source: Google DeepMind → 🔵  Google AI → 🔵  OpenAI → ⚫  "
-    "Anthropic → 🟠  Meta AI → 🔷  Hugging Face → 🟡  arXiv → 📄  other → 🔹\n"
-    "  - Each item under the group: <b>headline</b> on its own line, then exactly 1 sentence "
-    "(why it matters to AI practitioners — the impact or implication, not a restatement of the title), "
-    "then <a href=\"URL\">↗ read more</a>\n"
-    "  - Separate groups with a blank line\n\n"
+    "BODY — group articles by company/source. For each group output in this order:\n"
+    "  1. Source header: <source_emoji> <b>Source Name</b>\n"
+    "     Emoji per source: Google AI → 🔵  Google Research → 🔵  Google Cloud AI → 🔵  "
+    "Google DeepMind → 🔵  OpenAI → ⚫  Anthropic → 🟠  Meta AI → 🔷  "
+    "Hugging Face → 🟡  arXiv → 🟥  Microsoft → 🟦  NVIDIA → 🟩  other → 🔹\n"
+    "  2. Separator line: ──────────────────\n"
+    "  3. Each article in the group:\n"
+    "       🔹 <b>Project or Paper Name:</b> short descriptor (one line — if no distinct name, bold the full title)\n"
+    "       • <i>What it is</i> — one sentence.\n"
+    "       • <i>Why it matters</i> — one sentence on impact or implication for AI practitioners.\n"
+    "       🔗 <a href=\"URL\">Read Paper</a>  (use 'Read Paper' for arXiv, 'Read Post' for blogs)\n"
+    "  4. After each group (before the next source header): ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─\n\n"
 
-    "FOOTER (output this literally):\n"
-    "━━━━━━━━━━━━━━━━━━━\n"
+    "FOOTER (output literally):\n"
     "<i>Briefcast · daily at 09:00 IST</i>\n\n"
 
-    "Rules: AI and ML content only — skip anything not about models, research, or tooling. "
-    "No preamble. No sign-off. No 'Here is your briefing'."
+    "Rules: AI and ML content only. No preamble. No sign-off. No 'Here is your briefing'."
 )
 
 _MAX_ITEMS = 10
