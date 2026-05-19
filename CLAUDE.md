@@ -210,7 +210,7 @@ Permitted only when source carries CC-BY, Apache 2.0, MIT, or explicit redistrib
 Pattern: fetch PDF → extract text in memory → generate summary → store summary + metadata → discard raw text.
 Never write raw extracted text to the database. Intermediate text lives in memory only.
 
-Source-level storage mode overrides must be documented in `POLICY.md` and set in `app/models/source.py`.
+Source-level storage mode overrides must be documented in `docs/POLICY.md` and set in `app/models/source.py`.
 
 ### Hard rules — no exceptions
 - Never store full article body text
@@ -440,7 +440,10 @@ query rewriting · frontend · user auth · Slack · local embedding model · Ti
 ```
 briefcast/
 ├── CLAUDE.md                   ← this file
-├── POLICY.md                   ← public ingestion + storage policy for GitHub readers
+├── docs/
+│   ├── POLICY.md               ← public ingestion + storage policy for GitHub readers
+│   ├── env-setup.md            ← local environment setup guide
+│   └── railway-deployment.md  ← Railway deployment walkthrough
 ├── README.md
 ├── docker-compose.yml
 ├── Dockerfile

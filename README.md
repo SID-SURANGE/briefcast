@@ -135,6 +135,10 @@ briefcast/
 │   ├── dry_run_ingestion.py   # smoke-test registry and fetcher without writing to DB
 │   ├── run_ingestion_once.py  # one-shot ingestion against live DB
 │   └── cost_report.py         # weekly LLM spend aggregated from logs
+├── docs/
+│   ├── POLICY.md              # public ingestion + storage policy
+│   ├── env-setup.md           # local environment setup guide
+│   └── railway-deployment.md  # Railway deployment walkthrough
 ├── decisions/               # ADRs — every architectural decision documented
 ├── evals/                   # RAG eval harness scaffold (v1.5)
 ├── alembic/                 # DB migrations (pgvector extension + full schema)
@@ -184,7 +188,7 @@ Briefcast is built around ethical, attribution-respecting ingestion:
 - **arXiv abstracts** stored directly (open programmatic access, designed for discovery indexing)
 - **Soft-delete** on all content tables — nothing is hard-deleted
 
-See [`POLICY.md`](POLICY.md) for the complete ingestion and storage policy.
+See [`docs/POLICY.md`](docs/POLICY.md) for the complete ingestion and storage policy.
 
 ---
 
