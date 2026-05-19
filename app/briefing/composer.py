@@ -29,7 +29,8 @@ _SYSTEM_PROMPT = (
     "  - Use these emoji per source: Google DeepMind → 🔵  Google AI → 🔵  OpenAI → ⚫  "
     "Anthropic → 🟠  Meta AI → 🔷  Hugging Face → 🟡  arXiv → 📄  other → 🔹\n"
     "  - Each item under the group: <b>headline</b> on its own line, then exactly 1 sentence "
-    "(what happened — factual, no editorial gloss), then <a href=\"URL\">↗ read more</a>\n"
+    "(why it matters to AI practitioners — the impact or implication, not a restatement of the title), "
+    "then <a href=\"URL\">↗ read more</a>\n"
     "  - Separate groups with a blank line\n\n"
 
     "FOOTER (output this literally):\n"
