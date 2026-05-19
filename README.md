@@ -131,9 +131,10 @@ briefcast/
 │   ├── delivery/            # telegram_bot.py (primary), slack_bot.py (v1.5)
 │   └── observability/       # structlog setup + cost logging helpers
 ├── scripts/
-│   ├── seed_sources.py      # seed source registry into Postgres
-│   ├── run_ingestion_once.py
-│   └── cost_report.py       # weekly LLM spend aggregated from logs
+│   ├── seed_sources.py        # seed source registry into Postgres
+│   ├── dry_run_ingestion.py   # smoke-test registry and fetcher without writing to DB
+│   ├── run_ingestion_once.py  # one-shot ingestion against live DB
+│   └── cost_report.py         # weekly LLM spend aggregated from logs
 ├── decisions/               # ADRs — every architectural decision documented
 ├── evals/                   # RAG eval harness scaffold (v1.5)
 ├── alembic/                 # DB migrations (pgvector extension + full schema)

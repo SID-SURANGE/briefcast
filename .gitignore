@@ -206,6 +206,12 @@ tempCodeRunnerFile.py
 # Ruff stuff:
 .ruff_cache/
 
+# Claude Code local settings (machine-specific, not source code)
+.claude/
+
+# Scratch / one-time planning docs
+NEXT_STEPS.md
+
 # PyPI configuration file
 .pypirc
 

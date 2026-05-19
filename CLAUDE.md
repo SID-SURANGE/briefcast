@@ -481,6 +481,9 @@ briefcast/
 │   └── observability/
 │       └── logger.py           ← structlog setup + cost calculation helpers
 ├── scripts/
+│   ├── seed_sources.py         ← seed source registry into Postgres
+│   ├── dry_run_ingestion.py    ← smoke-test registry and fetcher without writing to DB
+│   ├── run_ingestion_once.py   ← one-shot ingestion against live DB
 │   └── cost_report.py          ← manual weekly cost aggregation from logs
 ├── evals/                      ← scaffold exists; flesh out at v1.5
 │   ├── questions.json          ← 20 Q&A pairs with expected sources + citation check
