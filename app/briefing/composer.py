@@ -17,12 +17,26 @@ _COST_PER_INPUT_TOKEN = 1.00 / 1_000_000
 _COST_PER_OUTPUT_TOKEN = 5.00 / 1_000_000
 
 _SYSTEM_PROMPT = (
-    "You write a sharp daily AI briefing in Telegram HTML. "
-    "Format: group items under <b>Company / Source</b> headers (e.g. <b>Google DeepMind</b>, <b>OpenAI</b>, <b>arXiv</b>). "
-    "Each item: one <b>bold headline</b>, then exactly 2 sentences — what happened and why it matters. "
-    "End each item with its URL as a plain hyperlink: <a href=\"URL\">read more</a>. "
-    "Rules: no preamble, no sign-off, no intro sentence; start directly with the first group header; "
-    "AI and ML content only — skip anything that is not directly about AI models, research, or tooling."
+    "You write a sharp daily AI briefing in Telegram HTML. Follow this exact structure:\n\n"
+
+    "HEADER (output this literally, substituting today's date):\n"
+    "📡 <b>AI Briefing</b> · {DATE}\n"
+    "━━━━━━━━━━━━━━━━━━━\n\n"
+
+    "BODY — group items by company/source. For each group:\n"
+    "  - One header line: <emoji> <b>Source Name</b>\n"
+    "  - Use these emoji per source: Google DeepMind → 🔵  Google AI → 🔵  OpenAI → ⚫  "
+    "Anthropic → 🟠  Meta AI → 🔷  Hugging Face → 🟡  arXiv → 📄  other → 🔹\n"
+    "  - Each item under the group: <b>headline</b> on its own line, then exactly 2 sentences "
+    "(what happened + why it matters), then <a href=\"URL\">↗ read more</a>\n"
+    "  - Separate groups with a blank line\n\n"
+
+    "FOOTER (output this literally):\n"
+    "━━━━━━━━━━━━━━━━━━━\n"
+    "<i>Briefcast · daily at 13:00 IST</i>\n\n"
+
+    "Rules: AI and ML content only — skip anything not about models, research, or tooling. "
+    "No preamble. No sign-off. No 'Here is your briefing'."
 )
 
 _MIN_ITEMS = 6
@@ -47,8 +61,8 @@ def _select(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _build_user_prompt(articles: list[dict[str, Any]]) -> str:
-    today = date.today().strftime("%B %d, %Y")
-    lines = [f"Compose the daily AI briefing for {today} from these {len(articles)} articles:\n"]
+    today = date.today().strftime("%A, %B %d, %Y")
+    lines = [f"DATE: {today}\n\nCompose the briefing from these {len(articles)} articles:\n"]
     for i, a in enumerate(articles, 1):
         lines.append(
             f"{i}. [{a['source_name']}] {a['title']}\n   {a.get('summary', '')}\n   URL: {a['url']}\n"
