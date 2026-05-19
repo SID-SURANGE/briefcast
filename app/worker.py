@@ -202,7 +202,7 @@ async def run_ranking() -> None:
 
 
 async def run_briefing() -> None:
-    """Select top-ranked articles, compose via Haiku, deliver via Telegram. Runs at 07:30 UTC (13:00 IST)."""
+    """Select top-ranked articles, compose via Haiku, deliver via Telegram. Runs at 03:30 UTC (09:00 IST)."""
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=14)
     db = SessionLocal()
     try:
@@ -248,7 +248,7 @@ async def main() -> None:
     configure_logging()
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(run_ingestion, "cron", hour="*/6", minute=0)
-    scheduler.add_job(run_briefing, "cron", hour=7, minute=30)
+    scheduler.add_job(run_briefing, "cron", hour=3, minute=30)
     scheduler.start()
     log.info("worker.started")
     try:

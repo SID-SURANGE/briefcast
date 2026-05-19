@@ -14,8 +14,16 @@ _COMMANDS = [
 ]
 
 
+_TELEGRAM_MAX_CHARS = 4096
+_TRUNCATION_NOTICE = "\n\n<i>…briefing truncated — see Railway logs for full output</i>"
+
+
 async def send_briefing(text: str) -> None:
     """Send the daily briefing to the configured personal chat (HTML parse mode)."""
+    if len(text) > _TELEGRAM_MAX_CHARS:
+        cutoff = _TELEGRAM_MAX_CHARS - len(_TRUNCATION_NOTICE)
+        text = text[:cutoff] + _TRUNCATION_NOTICE
+        log.warning("telegram.briefing_truncated", original_len=len(text))
     async with Bot(token=settings.telegram_bot_token) as bot:
         await bot.send_message(
             chat_id=settings.telegram_chat_id,

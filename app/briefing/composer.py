@@ -28,35 +28,70 @@ _SYSTEM_PROMPT = (
     "  - One header line: <emoji> <b>Source Name</b>\n"
     "  - Use these emoji per source: Google DeepMind → 🔵  Google AI → 🔵  OpenAI → ⚫  "
     "Anthropic → 🟠  Meta AI → 🔷  Hugging Face → 🟡  arXiv → 📄  other → 🔹\n"
-    "  - Each item under the group: <b>headline</b> on its own line, then exactly 2 sentences "
-    "(what happened + why it matters), then <a href=\"URL\">↗ read more</a>\n"
+    "  - Each item under the group: <b>headline</b> on its own line, then exactly 1 sentence "
+    "(what happened — factual, no editorial gloss), then <a href=\"URL\">↗ read more</a>\n"
     "  - Separate groups with a blank line\n\n"
 
     "FOOTER (output this literally):\n"
     "━━━━━━━━━━━━━━━━━━━\n"
-    "<i>Briefcast · daily at 13:00 IST</i>\n\n"
+    "<i>Briefcast · daily at 09:00 IST</i>\n\n"
 
     "Rules: AI and ML content only — skip anything not about models, research, or tooling. "
     "No preamble. No sign-off. No 'Here is your briefing'."
 )
 
-_MIN_ITEMS = 6
-_MAX_ITEMS = 8
+_MAX_ITEMS = 10
+_MAX_PER_COMPANY = 2
+
+# Source name substrings that belong to the same company for diversity capping.
+_COMPANY_GROUPS: dict[str, list[str]] = {
+    "google": ["google", "deepmind"],
+    "openai": ["openai"],
+    "anthropic": ["anthropic"],
+    "meta": ["meta"],
+    "huggingface": ["hugging face", "huggingface"],
+    "arxiv": ["arxiv"],
+    "mistral": ["mistral"],
+    "cohere": ["cohere"],
+    "microsoft": ["microsoft"],
+    "nvidia": ["nvidia"],
+    "xai": ["xai", "grok"],
+}
+
+
+def _company_key(source_name: str) -> str:
+    """Map a source name to a company key for diversity capping."""
+    name_lower = source_name.lower()
+    for key, patterns in _COMPANY_GROUPS.items():
+        if any(p in name_lower for p in patterns):
+            return key
+    return name_lower
 
 
 def _select(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Pick up to _MAX_ITEMS articles sorted by score.
+    Pick up to _MAX_ITEMS articles with per-company diversity cap.
     Guarantees at least one Tier 1 article if any exist in the corpus.
+    Articles must be pre-sorted by score descending.
     """
-    # articles are already score-sorted descending by the caller
-    selected = list(articles[:_MAX_ITEMS])
+    selected: list[dict[str, Any]] = []
+    company_counts: dict[str, int] = {}
 
+    for article in articles:
+        if len(selected) >= _MAX_ITEMS:
+            break
+        key = _company_key(article.get("source_name", ""))
+        if company_counts.get(key, 0) < _MAX_PER_COMPANY:
+            selected.append(article)
+            company_counts[key] = company_counts.get(key, 0) + 1
+
+    # Guarantee at least one Tier 1 if none made it through
     has_tier1 = any(a.get("source_tier") == 1 for a in selected)
     if not has_tier1:
-        tier1_outside = [a for a in articles[_MAX_ITEMS:] if a.get("source_tier") == 1]
-        if tier1_outside:
-            selected[-1] = tier1_outside[0]
+        for article in articles:
+            if article.get("source_tier") == 1 and article not in selected:
+                selected[-1] = article
+                break
 
     return selected
 
@@ -120,7 +155,7 @@ async def compose(articles: list[dict[str, Any]]) -> str:
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "max_tokens": 1600,
+                    "max_tokens": 2000,
                     "temperature": 0.4,
                 },
             )

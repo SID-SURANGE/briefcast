@@ -75,7 +75,22 @@ SOURCES: list[SourceDefinition] = [
         classification="verified-official",
         storage_mode="abstract_metadata",
     ),
+    SourceDefinition(
+        name="Microsoft AI Blog",
+        feed_url="https://blogs.microsoft.com/ai/feed/",
+        feed_type="rss", tier=2,
+        classification="verified-official",
+        storage_mode="summary_metadata",
+    ),
+    SourceDefinition(
+        name="NVIDIA Blog",
+        feed_url="https://blogs.nvidia.com/feed/",
+        feed_type="rss", tier=2,
+        classification="verified-official",
+        storage_mode="summary_metadata",
+    ),
     # Anthropic, Mistral, Cohere: no confirmed RSS URL — add when verified
+    # xAI (x.ai/blog): no RSS feed published yet — revisit when available
 ]
 
 # Definition-only fields — runtime state columns are never overwritten by a sync

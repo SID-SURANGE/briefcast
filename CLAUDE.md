@@ -50,7 +50,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Circuit breaker | `app/ingestion/circuit_breaker.py` | ✅ 3-strike → `degraded` on Source row; `record_success/failure/is_open(name, db)` |
 | Summariser | `app/processing/summariser.py` | ✅ Gemini Flash via OpenRouter; `summarise(title, abstract, source)`; cost logged |
 | Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
-| Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 07:30 UTC (13:00 IST); deployed on Railway |
+| Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 03:30 UTC (09:00 IST); deployed on Railway |
 | Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
 | Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; webhook registered at `@BrfCastBot` |
 | RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
@@ -152,6 +152,8 @@ If a feed path is wrong, check the source page for a canonical `/feed` or `/rss`
 | Meta AI Blog | RSS | `https://ai.meta.com/blog/rss/` `[VERIFY]` | `verify-before-enabling` | Mode A |
 | Mistral AI | RSS | Check `mistral.ai/news` for `/rss` or `/feed` path. No confirmed URL. `[VERIFY]` | `verify-before-enabling` | Mode A |
 | Cohere Blog | RSS | Check `cohere.com/blog` for feed path. No confirmed URL. `[VERIFY]` | `verify-before-enabling` | Mode A |
+| Microsoft AI Blog | RSS | `https://blogs.microsoft.com/ai/feed/` | `verified-official` | Mode A |
+| NVIDIA Blog | RSS | `https://blogs.nvidia.com/feed/` | `verified-official` | Mode A |
 | Arxiv cs.AI + cs.LG | Official API | `https://export.arxiv.org/api/query` — public, no auth needed | `verified-official` | Mode B |
 
 ### TIER 3 — Major Open-Weight / Global Labs (v1.5 — add after MVP is stable)
