@@ -23,80 +23,93 @@ from app.ranking.ranker import rank
 log = structlog.get_logger()
 
 
-async def _ingest_source(source: Source, db: Session) -> int:
-    """Fetch, dedup, summarise and persist articles for one source. Returns new article count."""
-    t0 = time.monotonic()
+async def _ingest_source(source_id: int) -> int:
+    """Fetch, dedup, summarise and persist articles for one source.
+
+    Opens its own DB session so a long-running source cannot exhaust a shared
+    connection that Railway's proxy might close after ~5 minutes of inactivity.
+    Returns new article count.
+    """
+    db = SessionLocal()
     try:
-        if source.feed_type == "rss":
-            items = await fetch_rss(source.feed_url)
-        elif source.feed_type == "arxiv_api":
-            items = await fetch_arxiv(source.feed_url)
-        else:
-            log.warning("worker.unknown_feed_type", source=source.name, feed_type=source.feed_type)
+        source = db.get(Source, source_id)
+        if source is None:
             return 0
-        record_success(source.name, db)
-        source.last_fetched_at = datetime.now(tz=timezone.utc)
-        db.commit()
-    except Exception as exc:
-        log.error("worker.fetch_error", source=source.name, error=str(exc))
-        record_failure(source.name, db)
-        if source.circuit_breaker_state == "degraded":
-            await send_alert(
-                f"Source '{source.name}' circuit breaker tripped — "
-                f"{source.consecutive_failures} consecutive failures."
-            )
-        return 0
 
-    new_count = 0
-    for item in items:
+        t0 = time.monotonic()
         try:
-            # L1 check before paying for an embed call
-            h = l1_hash(item["url"])
-            if db.query(Article).filter(Article.dedup_hash == h, Article.deleted_at.is_(None)).first():
-                continue
-
-            title_embedding = await embed(item["title"], task_type="search_document")
-
-            if is_duplicate(item["url"], title_embedding, db):
-                continue
-
-            # Mode B (arXiv): store abstract directly; Mode A: generate summary
-            if source.storage_mode == "abstract_metadata":
-                summary_text = item.get("abstract") or item["title"]
+            if source.feed_type == "rss":
+                items = await fetch_rss(source.feed_url)
+            elif source.feed_type == "arxiv_api":
+                items = await fetch_arxiv(source.feed_url)
             else:
-                summary_text = await summarise(
-                    item["title"], item.get("abstract") or item["title"], source.name
-                )
-
-            summary_embedding = await embed(summary_text, task_type="search_document")
-
-            article = Article(
-                url=item["url"],
-                title=item["title"],
-                author=item.get("author"),
-                source_name=source.name,
-                source_tier=source.tier,
-                published_at=item.get("published_at"),
-                summary=summary_text,
-                embedding=summary_embedding,
-                dedup_hash=h,
-                storage_mode=source.storage_mode,
-            )
-            db.add(article)
+                log.warning("worker.unknown_feed_type", source=source.name, feed_type=source.feed_type)
+                return 0
+            record_success(source.name, db)
+            source.last_fetched_at = datetime.now(tz=timezone.utc)
             db.commit()
-            new_count += 1
         except Exception as exc:
-            log.error("worker.item_error", source=source.name, url=item.get("url"), error=str(exc))
-            db.rollback()
+            log.error("worker.fetch_error", source=source.name, error=str(exc))
+            record_failure(source.name, db)
+            if source.circuit_breaker_state == "degraded":
+                await send_alert(
+                    f"Source '{source.name}' circuit breaker tripped — "
+                    f"{source.consecutive_failures} consecutive failures."
+                )
+            return 0
 
-    log.info(
-        "worker.source_done",
-        source=source.name,
-        fetched=len(items),
-        new=new_count,
-        latency_ms=round((time.monotonic() - t0) * 1000, 1),
-    )
-    return new_count
+        new_count = 0
+        for item in items:
+            try:
+                # L1 check before paying for an embed call
+                h = l1_hash(item["url"])
+                if db.query(Article).filter(Article.dedup_hash == h, Article.deleted_at.is_(None)).first():
+                    continue
+
+                title_embedding = await embed(item["title"], task_type="search_document")
+
+                if is_duplicate(item["url"], title_embedding, db):
+                    continue
+
+                # Mode B (arXiv): store abstract directly; Mode A: generate summary
+                if source.storage_mode == "abstract_metadata":
+                    summary_text = item.get("abstract") or item["title"]
+                else:
+                    summary_text = await summarise(
+                        item["title"], item.get("abstract") or item["title"], source.name
+                    )
+
+                summary_embedding = await embed(summary_text, task_type="search_document")
+
+                article = Article(
+                    url=item["url"],
+                    title=item["title"],
+                    author=item.get("author"),
+                    source_name=source.name,
+                    source_tier=source.tier,
+                    published_at=item.get("published_at"),
+                    summary=summary_text,
+                    embedding=summary_embedding,
+                    dedup_hash=h,
+                    storage_mode=source.storage_mode,
+                )
+                db.add(article)
+                db.commit()
+                new_count += 1
+            except Exception as exc:
+                log.error("worker.item_error", source=source.name, url=item.get("url"), error=str(exc))
+                db.rollback()
+
+        log.info(
+            "worker.source_done",
+            source=source.name,
+            fetched=len(items),
+            new=new_count,
+            latency_ms=round((time.monotonic() - t0) * 1000, 1),
+        )
+        return new_count
+    finally:
+        db.close()
 
 
 async def run_ingestion() -> None:
@@ -104,17 +117,18 @@ async def run_ingestion() -> None:
     log.info("worker.ingestion_start")
     db = SessionLocal()
     try:
-        sources = (
-            db.query(Source)
+        source_ids = [
+            row.id for row in db.query(Source.id)
             .filter(Source.deleted_at.is_(None), Source.circuit_breaker_state != "degraded")
             .all()
-        )
-        total_new = 0
-        for source in sources:
-            total_new += await _ingest_source(source, db)
-        log.info("worker.ingestion_done", sources=len(sources), total_new=total_new)
+        ]
     finally:
         db.close()
+
+    total_new = 0
+    for source_id in source_ids:
+        total_new += await _ingest_source(source_id)
+    log.info("worker.ingestion_done", sources=len(source_ids), total_new=total_new)
 
     await run_ranking()
 
