@@ -24,6 +24,22 @@ log = structlog.get_logger()
 
 _ITEM_TIMEOUT_S = 90  # max seconds per article: embed + summarise + embed
 
+_AI_KEYWORDS = frozenset({
+    "ai", "artificial intelligence", "machine learning", "deep learning", "neural",
+    "llm", "large language model", "foundation model", "transformer", "diffusion",
+    "generative", "gemini", "gpt", "claude", "mistral", "llama", "qwen", "deepseek",
+    "model", "benchmark", "training", "inference", "fine-tun", "rlhf", "alignment",
+    "multimodal", "embedding", "vector", "rag", "agent", "reasoning", "hallucination",
+    "token", "parameter", "dataset", "evaluation", "openai", "anthropic", "deepmind",
+    "hugging face", "research", "paper", "arxiv",
+})
+
+
+def _is_ai_relevant(title: str) -> bool:
+    """Return True if the article title contains at least one AI-related keyword."""
+    lower = title.lower()
+    return any(kw in lower for kw in _AI_KEYWORDS)
+
 
 async def _ingest_source(source_id: int) -> int:
     """Fetch, dedup, summarise and persist articles for one source.
@@ -67,6 +83,10 @@ async def _ingest_source(source_id: int) -> int:
                 h = l1_hash(item["url"])
                 if db.query(Article).filter(Article.dedup_hash == h, Article.deleted_at.is_(None)).first():
                     log.debug("worker.item_skip_l1", source=source.name, idx=idx, total=len(items))
+                    continue
+
+                if not _is_ai_relevant(item["title"]):
+                    log.debug("worker.item_skip_irrelevant", source=source.name, title=item["title"][:80])
                     continue
 
                 log.info("worker.item_processing", source=source.name, idx=idx, total=len(items), title=item["title"][:80])

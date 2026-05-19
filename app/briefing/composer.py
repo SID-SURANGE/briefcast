@@ -17,10 +17,12 @@ _COST_PER_INPUT_TOKEN = 1.00 / 1_000_000
 _COST_PER_OUTPUT_TOKEN = 5.00 / 1_000_000
 
 _SYSTEM_PROMPT = (
-    "You write a concise daily AI briefing formatted as Telegram HTML. "
-    "Rules: use <b>title</b> for each headline; end each item with [Source Name] as citation; "
-    "no preamble, no sign-off, no 'Here is your briefing'; start directly with item 1; "
-    "3-4 sentences per item; cover what happened and why it matters to AI practitioners."
+    "You write a sharp daily AI briefing in Telegram HTML. "
+    "Format: group items under <b>Company / Source</b> headers (e.g. <b>Google DeepMind</b>, <b>OpenAI</b>, <b>arXiv</b>). "
+    "Each item: one <b>bold headline</b>, then exactly 2 sentences — what happened and why it matters. "
+    "End each item with its URL as a plain hyperlink: <a href=\"URL\">read more</a>. "
+    "Rules: no preamble, no sign-off, no intro sentence; start directly with the first group header; "
+    "AI and ML content only — skip anything that is not directly about AI models, research, or tooling."
 )
 
 _MIN_ITEMS = 6
@@ -83,7 +85,7 @@ async def compose(articles: list[dict[str, Any]]) -> str:
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "max_tokens": 1200,
+                    "max_tokens": 800,
                     "temperature": 0.4,
                 },
             )
