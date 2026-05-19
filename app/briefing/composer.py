@@ -42,7 +42,10 @@ _SYSTEM_PROMPT = (
 )
 
 _MAX_ITEMS = 10
-_MAX_PER_COMPANY = 2
+_DEFAULT_MAX_PER_COMPANY = 2
+_COMPANY_CAP_OVERRIDES: dict[str, int] = {
+    "google": 4,  # Tier 1 priority — up to 4 Google/DeepMind articles
+}
 
 # Source name substrings that belong to the same company for diversity capping.
 _COMPANY_GROUPS: dict[str, list[str]] = {
@@ -82,7 +85,8 @@ def _select(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if len(selected) >= _MAX_ITEMS:
             break
         key = _company_key(article.get("source_name", ""))
-        if company_counts.get(key, 0) < _MAX_PER_COMPANY:
+        cap = _COMPANY_CAP_OVERRIDES.get(key, _DEFAULT_MAX_PER_COMPANY)
+        if company_counts.get(key, 0) < cap:
             selected.append(article)
             company_counts[key] = company_counts.get(key, 0) + 1
 
