@@ -3,6 +3,12 @@
 Paste the Mermaid code below into [mermaid.live](https://mermaid.live) to render and export as PNG/SVG.
 It also renders automatically in GitHub README and Notion.
 
+## Sample output
+
+This is what the pipeline delivers to Telegram every morning at 09:00 IST:
+
+![Sample Briefcast briefing in Telegram](images/Sample_brief.png)
+
 ```mermaid
 flowchart TD
     %% ─── SOURCES ───────────────────────────────────────────────

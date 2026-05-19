@@ -28,6 +28,14 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 
 ---
 
+## 📱 Sample briefing
+
+> Real output delivered to Telegram at 09:00 IST
+
+![Sample Briefcast briefing in Telegram](docs/images/Sample_brief.png)
+
+---
+
 ## ✨ Core features
 
 | Feature | Detail |
