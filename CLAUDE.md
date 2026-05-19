@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ---
 
 # Briefcast — personal AI intelligence briefing agent + RAG query-back
-**CLAUDE.md · v1.2 · 2026-05-18**
+**CLAUDE.md · v1.3 · 2026-05-19**
 
 Read this fully at the start of every Claude Code session before writing any code.
 Lines marked `[VERIFY]` must be tested live before the connector is enabled.
@@ -34,15 +34,15 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 > **Keep this section current.** Update it at the end of every session or after every feature lands.
 > Claude reads this first — an accurate status here avoids redundant codebase exploration.
 
-### What is built and working (as of 2026-05-18)
+### What is built and working (as of 2026-05-19)
 
 | Layer | File(s) | Status |
 |---|---|---|
 | Config | `app/config.py` | ✅ pydantic-settings, all env vars, DEDUP_THRESHOLD |
-| DB session | `app/db.py` | ✅ SQLAlchemy engine + `get_db()` |
+| DB session | `app/db.py` | ✅ SQLAlchemy engine; normalises `postgresql://` → `postgresql+psycopg://` for Railway compat |
 | Models | `app/models/article.py`, `source.py`, `base.py` | ✅ full schema with pgvector, soft-delete |
-| Migrations | `alembic/versions/0001_*`, `0002_*` | ✅ applied; pgvector extension + both tables |
-| API server | `app/main.py` | ✅ FastAPI + `/healthz` + `POST /telegram` webhook |
+| Migrations | `alembic/versions/0001_*`, `0002_*` | ✅ applied on Railway; pgvector extension + both tables |
+| API server | `app/main.py` | ✅ FastAPI + `/healthz` + `POST /telegram` webhook; deployed on Railway |
 | Observability | `app/observability/logger.py` | ✅ `configure_logging()` JSON structlog; `log_llm_call()` with all required fields |
 | RSS + arXiv fetcher | `app/ingestion/fetcher.py` | ✅ `fetch_rss()` feedparser+httpx; `fetch_arxiv()` Atom XML |
 | Deduplication | `app/ingestion/dedup.py` | ✅ L1 SHA-256 hash; L2 cosine (numpy); `is_duplicate(url, embedding, db)` |
@@ -50,33 +50,41 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Circuit breaker | `app/ingestion/circuit_breaker.py` | ✅ 3-strike → `degraded` on Source row; `record_success/failure/is_open(name, db)` |
 | Summariser | `app/processing/summariser.py` | ✅ Gemini Flash via OpenRouter; `summarise(title, abstract, source)`; cost logged |
 | Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
-| Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` (6h) → `run_ranking()`; `run_briefing()` (08:00 UTC) |
+| Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 07:30 UTC (13:00 IST); deployed on Railway |
 | Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
-| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; `build_application()` with message handler |
+| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; webhook registered at `@BrfCastBot` |
 | RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
 | RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; embed→retrieve→generate; inline HTML citations |
-| Source registry | `app/ingestion/registry.py` | ✅ 8 sources (4 Tier 1 Google + 4 Tier 2); all URLs verified live; `sync_sources()` returns `(inserted, updated)` |
-| Source seeding | `scripts/seed_sources.py` | ✅ verifies URLs live + upserts to DB; 8/8 sources in sources table |
-| One-shot ingestion | `scripts/run_ingestion_once.py` | ✅ triggers full fetch→dedup→summarise→embed→rank cycle |
+| Source registry | `app/ingestion/registry.py` | ✅ 8 sources (4 Tier 1 Google + 4 Tier 2); all URLs verified live |
+| Source seeding | `scripts/seed_sources.py` | ✅ 8/8 sources seeded into Railway Postgres |
+| One-shot ingestion | `scripts/run_ingestion_once.py` | ✅ first live ingestion running against Railway DB (in progress 2026-05-19) |
+| Alembic env | `alembic/env.py` | ✅ URL scheme normalised; migrations run clean on Railway |
 | Tests | `tests/test_dedup.py`, `test_ranker.py`, `test_retriever.py` | ✅ 32/32 passing |
-| Local env | `.venv`, docker compose db, alembic | ✅ running; 335 articles in DB, 26 scored (14-day window) |
+| Railway deployment | API + Worker services | ✅ both deployed; API public domain active |
 
 ### Known verified feed URLs
 - Meta AI Blog: `https://engineering.fb.com/feed/` (ai.meta.com/blog/rss/ returns 404)
 - OpenAI News: `https://openai.com/news/rss.xml` (openai.com/news/rss/ returns 403)
 
-### What remains before full end-to-end live
+### Railway deployment details
+- API service: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- Worker service: `python -m app.worker`
+- DB: Railway Postgres; internal host `postgres.railway.internal:5432`; public host `centerbeam.proxy.rlwy.net:11559`
+- Telegram bot: `@BrfCastBot` — webhook registered, bot page live at `t.me/BrfCastBot`
+- Local Docker DB: stopped — all work now targets Railway Postgres via public URL
+
+### What remains
 
 | Step | What it needs |
 |---|---|
-| Deploy to Railway | Push Docker image; set all env vars in Railway dashboard |
-| Register Telegram webhook | `POST https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<railway-domain>/telegram` |
-| Full ingestion run | Run `scripts/run_ingestion_once.py` to completion (was stopped early in local testing) |
-| Verify briefing fires | Confirm `run_briefing()` sends a message to TELEGRAM_CHAT_ID at 08:00 UTC |
+| Confirm first ingestion completes | `run_ingestion_once.py` running — watch for `ranker.done` in logs |
+| Trigger manual briefing | Run `run_briefing()` locally pointing at Railway DB to get first Telegram message |
+| Confirm scheduled briefing fires | Daily at 13:00 IST via Railway worker — check Railway worker logs |
+| Monitor first week | Check Railway logs for circuit breaker trips or 402s; run `scripts/cost_report.py` |
 
 ### Recommended next step
 
-**Deploy to Railway.** The full pipeline is complete locally. Push the repo, create Railway API + Worker services, set env vars, apply migrations (`alembic upgrade head`), and register the Telegram webhook URL. Then trigger a manual briefing to verify end-to-end delivery.
+**Trigger a manual briefing** once `run_ingestion_once.py` completes. Point `DATABASE_URL` at the Railway public URL and run `run_briefing()` to verify the full end-to-end loop: Railway DB → composer → Telegram delivery. See `docs/railway-deployment.md` Step 10.
 
 ---
 
