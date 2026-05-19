@@ -16,7 +16,7 @@
 
 ## 🧠 What it does
 
-Briefcast runs a fully automated pipeline that monitors **Google AI, Anthropic, OpenAI, DeepMind, Hugging Face, Meta AI, and arXiv** — then delivers a curated, ranked intelligence briefing to your Telegram every morning.
+Briefcast runs a fully automated pipeline that monitors **Google AI, Google DeepMind, OpenAI, Anthropic, Meta AI, Hugging Face, Microsoft AI, NVIDIA, and arXiv** — then delivers a curated, ranked intelligence briefing to your Telegram every morning.
 
 Ask a follow-up question directly in Telegram and it answers from a **grounded, cited 14-day rolling knowledge base** — no hallucinations, sources always shown.
 
@@ -35,7 +35,7 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 | 🥇 **Tiered source ranking** | Google AI family always surfaces first. Tier 1 → Tier 2 → arXiv. |
 | 🔁 **2-layer deduplication** | SHA-256 URL hash (O(1)) + cosine similarity to catch near-duplicates across sources. |
 | ✍️ **AI summarisation** | Gemini 2.5 Flash generates a tight 3–5 sentence summary per article. |
-| 📰 **Daily briefing** | Claude Haiku composes a top 6–8 briefing with mandatory inline citations. Delivered at 13:00 IST. |
+| 📰 **Daily briefing** | Claude Haiku composes a top 10 briefing with mandatory inline citations. Delivered at 09:00 IST. |
 | 💬 **RAG query-back** | Ask anything in Telegram. Claude Sonnet answers from your 14-day corpus with citations. |
 | ⚡ **Circuit breaker** | 3 consecutive feed failures → source marked degraded → Telegram alert fires immediately. |
 | 💰 **Cost-conscious by design** | ~$2–3/month in LLM spend. Runs on a $5/month Railway instance. Total: ~$8/month. |
@@ -47,8 +47,8 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  📥 Sources (RSS / Official APIs)                       │
-│  Google AI · DeepMind · OpenAI · Anthropic              │
-│  Hugging Face · Meta AI · arXiv cs.AI + cs.LG           │
+│  Google AI · DeepMind · OpenAI · Anthropic               │
+│  Meta AI · Hugging Face · Microsoft · NVIDIA · arXiv    │
 └────────────────────┬────────────────────────────────────┘
                      │ every 6h (APScheduler)
                      ▼
@@ -66,11 +66,11 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 │  📊 Ranking                                             │
 │  score = tier(0.35) + recency(0.35) + novelty(0.30)     │
 └────────────────────┬────────────────────────────────────┘
-                     │ 13:00 IST daily
+                     │ 09:00 IST daily
                      ▼
 ┌─────────────────────────────────────────────────────────┐
 │  📬 Briefing → Telegram                                 │
-│  Claude Haiku · top 6–8 items · citations mandatory     │
+│  Claude Haiku · top 10 items · citations mandatory      │
 └────────────────────┬────────────────────────────────────┘
                      │ on demand
                      ▼
@@ -207,20 +207,25 @@ A fully automated personal AI intelligence pipeline for less than a coffee.
 
 ---
 
-## 📐 Architecture decisions
+## 📐 Architecture
 
-Every key design choice is documented as an ADR in [`decisions/`](decisions/):
+See the full interactive diagram → [`docs/architecture.md`](docs/architecture.md)
+*(Mermaid — renders in GitHub, Notion, and [mermaid.live](https://mermaid.live))*
+
+Every key design choice is documented as an ADR in [`decisions/`](decisions/).
+A cross-cutting design FAQ covering chunking, model selection, ranking, and retrieval is at [`decisions/design-faq.md`](decisions/design-faq.md).
 
 | ADR | Decision |
 |---|---|
-| `001` | pgvector over Pinecone — single DB, SQL joins, no extra infrastructure at <1M vectors |
-| `002` | Model selection per task — cost vs quality calibrated to task risk |
-| `003` | RSS/API-only ingestion in v1 — legal clarity and feed stability over scraping flexibility |
-| `004` | Citations mandatory — groundedness is the primary trust signal, not optional |
-| `005` | Google Tier 1 priority — explicitly aligned with career and product goals |
-| `007` | OpenRouter as LLM gateway — one key, unified billing, model swaps without code changes |
-| `008` | Telegram over Slack — free, no OAuth, unlimited history, right fit for a personal tool |
-| `009` | Nomic API over local embeddings — no RAM overhead on Railway Hobby, same model quality |
+| [`001`](decisions/001-pgvector-over-pinecone.md) | pgvector over Pinecone — single DB, SQL joins, no extra infrastructure at <1M vectors |
+| [`002`](decisions/002-model-selection-cost-quality.md) | Model selection per task — cost vs quality calibrated to task risk |
+| [`003`](decisions/003-rss-only-v1-ingestion.md) | RSS/API-only ingestion in v1 — legal clarity and feed stability over scraping flexibility |
+| [`004`](decisions/004-citations-mandatory.md) | Citations mandatory — groundedness is the primary trust signal, not optional |
+| [`005`](decisions/005-google-tier1-priority.md) | Google Tier 1 priority — explicitly aligned with career and product goals |
+| [`007`](decisions/007-openrouter-gateway.md) | OpenRouter as LLM gateway — one key, unified billing, model swaps without code changes |
+| [`008`](decisions/008-telegram-over-slack.md) | Telegram over Slack — free, no OAuth, unlimited history, right fit for a personal tool |
+| [`009`](decisions/009-nomic-api-over-local-embedding.md) | Nomic API over local embeddings — no RAM overhead on Railway Hobby, same model quality |
+| [`FAQ`](decisions/design-faq.md) | Deep-dive: chunking, dedup thresholds, ranking weights, retrieval k, model rationale |
 
 ---
 
