@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+# Railway injects postgresql:// but psycopg3 requires postgresql+psycopg://
+_db_url = settings.database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+engine = create_engine(_db_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
