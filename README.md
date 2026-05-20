@@ -191,7 +191,7 @@ briefcast/
 
 ```powershell
 # 1. Clone and set up virtual environment
-git clone https://github.com/your-username/briefcast.git
+git clone https://github.com/SID-SURANGE/briefcast.git
 cd briefcast
 python -m venv .venv
 .venv\Scripts\pip install -e ".[dev]"
@@ -215,6 +215,85 @@ docker compose up -d db
 .venv\Scripts\uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 # Verify: GET /healthz → {"status": "ok"}
 ```
+
+---
+
+## ☁️ Deploy on Railway
+
+Railway runs two services from the same repo: the **API** (always-on FastAPI + Telegram webhook) and the **Worker** (APScheduler cron for ingestion + briefing). They share a Railway Postgres database.
+
+Full walkthrough: [`docs/railway-deployment.md`](docs/railway-deployment.md)
+
+### Prerequisites
+
+- [Railway account](https://railway.app) (Hobby plan ~$5/month)
+- Telegram bot token — create one via [@BotFather](https://t.me/BotFather)
+- OpenRouter API key — [openrouter.ai](https://openrouter.ai)
+- Nomic API key — [nomic.ai](https://atlas.nomic.ai) (free tier)
+- LangSmith API key — [smith.langchain.com](https://smith.langchain.com) (free tier, optional)
+
+### Steps
+
+**1. Provision database**
+
+Add a Railway Postgres plugin to your project. Railway injects `DATABASE_URL` automatically — the app normalises `postgresql://` → `postgresql+psycopg://` on startup.
+
+Enable the pgvector extension (one-time, run in Railway's Postgres shell):
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+**2. Deploy API service**
+
+Create a new Railway service from this repo. Set the start command:
+```
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+**3. Deploy Worker service**
+
+Create a second Railway service from the same repo. Set the start command:
+```
+python -m app.worker
+```
+
+**4. Set environment variables** (both services)
+
+```
+OPENROUTER_API_KEY=
+NOMIC_API_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=          # send /start to @userinfobot to get yours
+DEDUP_THRESHOLD=0.92
+OPENROUTER_APP_REFERER=
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=
+LANGSMITH_PROJECT=briefcast-dev
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
+
+**5. Run migrations and seed sources**
+
+Point `DATABASE_URL` at your Railway public Postgres URL, then run locally:
+```powershell
+.venv\Scripts\alembic upgrade head
+.venv\Scripts\python scripts/seed_sources.py
+```
+
+**6. Register the Telegram webhook**
+
+Replace `<TOKEN>` and `<YOUR_RAILWAY_DOMAIN>` and call this once:
+```
+https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<YOUR_RAILWAY_DOMAIN>/telegram
+```
+
+**7. Verify**
+
+```
+GET https://<your-railway-domain>/healthz  →  {"status": "ok"}
+```
+
+Trigger a manual ingestion to populate the DB, then send any message to your bot to test RAG query-back.
 
 ---
 

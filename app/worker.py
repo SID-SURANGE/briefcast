@@ -224,9 +224,9 @@ async def run_briefing() -> None:
             for a in articles
         ]
 
-        briefing_text = await compose(article_dicts)
+        briefing_text, source_keys = await compose(article_dicts)
         if briefing_text:
-            await send_briefing(briefing_text)
+            await send_briefing(briefing_text, source_keys)
             log.info("worker.briefing_done")
     finally:
         db.close()

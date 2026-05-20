@@ -320,7 +320,7 @@ LANGSMITH_PROJECT         # e.g. "briefcast-dev"
 LANGSMITH_TRACING         # set to "true"
 LANGSMITH_ENDPOINT        # https://apac.api.smith.langchain.com (APAC) or https://api.smith.langchain.com (US)
 DEDUP_THRESHOLD=0.92      # plain number only — pydantic-settings cannot parse inline comments
-OPENROUTER_APP_REFERER=https://github.com/your-username/briefcast   # shown in OpenRouter dashboard
+OPENROUTER_APP_REFERER=https://github.com/SID-SURANGE/briefcast   # shown in OpenRouter dashboard
 ```
 
 ### Budget

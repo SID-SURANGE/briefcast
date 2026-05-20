@@ -51,7 +51,7 @@ _COMPANY_CAP_OVERRIDES: dict[str, int] = {
 }
 
 # Source name substrings that belong to the same company for diversity capping.
-_COMPANY_GROUPS: dict[str, list[str]] = {
+COMPANY_GROUPS: dict[str, list[str]] = {
     "google": ["google", "deepmind"],
     "openai": ["openai"],
     "anthropic": ["anthropic"],
@@ -69,7 +69,7 @@ _COMPANY_GROUPS: dict[str, list[str]] = {
 def _company_key(source_name: str) -> str:
     """Map a source name to a company key for diversity capping."""
     name_lower = source_name.lower()
-    for key, patterns in _COMPANY_GROUPS.items():
+    for key, patterns in COMPANY_GROUPS.items():
         if any(p in name_lower for p in patterns):
             return key
     return name_lower
@@ -117,7 +117,7 @@ def _build_user_prompt(articles: list[dict[str, Any]]) -> str:
 _TELEGRAM_INLINE_TAGS = ["b", "i", "u", "s", "code", "pre"]
 
 
-def _close_open_tags(text: str) -> str:
+def close_open_tags(text: str) -> str:
     """Close any inline HTML tags left open by a truncated LLM response."""
     open_tags: list[str] = []
     for m in re.finditer(r"<(/?)(\w+)[^>]*>", text):
@@ -134,17 +134,29 @@ def _close_open_tags(text: str) -> str:
     return text
 
 
-async def compose(articles: list[dict[str, Any]]) -> str:
+async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str]]:
     """
-    Select top articles, call Haiku to compose a Telegram-HTML briefing, return the text.
+    Select top articles, call Haiku to compose a Telegram-HTML briefing.
+    Returns (briefing_text, source_keys) where source_keys is the ordered list of
+    unique company keys that appeared in the briefing (used to build drill-down buttons).
     Caller should pass articles sorted by score descending (output of ranker.rank()).
-    Returns empty string if no articles are provided.
+    Returns ("", []) if no articles are provided.
     """
     if not articles:
         log.warning("composer.no_articles")
-        return ""
+        return "", []
 
     selected = _select(articles)
+
+    # Collect unique company keys in appearance order for the inline keyboard
+    source_keys: list[str] = []
+    seen: set[str] = set()
+    for a in selected:
+        key = _company_key(a.get("source_name", ""))
+        if key not in seen:
+            source_keys.append(key)
+            seen.add(key)
+
     user_prompt = _build_user_prompt(selected)
 
     t0 = time.monotonic()
@@ -190,6 +202,6 @@ async def compose(articles: list[dict[str, Any]]) -> str:
         estimated_cost_usd=cost,
         source="briefing",
     )
-    text = _close_open_tags(text)
+    text = close_open_tags(text)
     log.info("composer.done", selected=len(selected), latency_ms=round(latency_ms, 1))
-    return text
+    return text, source_keys
