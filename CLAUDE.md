@@ -292,7 +292,14 @@ Query Handler (FastAPI, always-on — Telegram webhook or polling)
 |---|---|---|---|
 | Per-article summarisation | `google/gemini-2.5-flash` | OpenRouter | Lowest hallucination rate on summarisation benchmarks. ~$0.50/M input. 1M context. |
 | Daily briefing composition | `claude-haiku-4-5` | OpenRouter | Writing quality and tone matter for daily reading. Haiku beats Gemini Flash in blind evals. $1/M input. |
-| RAG query responses | `claude-sonnet-4-6` | OpenRouter | Multi-source grounded reasoning with citation. Hallucination risk is highest here. Sonnet justified. |
+| RAG query responses | `claude-sonnet-4-6` | OpenRouter | Multi-source grounded reasoning with citation. Hallucination risk is highest here. Sonnet justified. Prompt caching enabled — see ADR 010. |
+
+**RAG prompt caching (ADR 010):**
+The static system prompt in `app/rag/responder.py` is marked `cache_control: ephemeral`.
+Anthropic caches it server-side for 5 minutes. Cache-hit queries pay $0.30/M on the system prompt
+vs $3.00/M uncached — a 90% reduction on that token bucket. Cache writes cost $3.75/M (paid once
+per 5-min window). Break-even is 2 queries per window. `cache_read_tokens` and `cache_write_tokens`
+are logged in every `responder.done` structured log line.
 
 **Why not Gemini Flash for briefing composition:**
 In blind writing quality evaluations, Claude output is preferred ~47% of the time vs Gemini's ~24%.
@@ -508,7 +515,8 @@ briefcast/
 │   ├── 006-storage-modes.md
 │   ├── 007-openrouter-gateway.md
 │   ├── 008-telegram-over-slack.md
-│   └── 009-nomic-api-over-local-embedding.md
+│   ├── 009-nomic-api-over-local-embedding.md
+│   └── 010-prompt-caching-rag-system-prompt.md
 └── tests/
     ├── test_dedup.py
     ├── test_ranker.py
@@ -545,6 +553,7 @@ Name RAG stages correctly in ADRs and code comments:
 | Haiku for briefing composition | Writing quality matters for daily reading; Claude preferred in blind evals |
 | Sonnet for RAG responses | Multi-source grounded reasoning with citation risk — quality is non-negotiable |
 | Nomic API over local embedding | No RAM overhead on Railway Hobby; same model, free tier, simpler ops |
+| Prompt caching on RAG system prompt | Static system prompt cached ephemeral (5-min TTL); cache reads cost 90% less than full input. Break-even at 2 queries/window. See ADR 010. |
 | OpenRouter gateway | Single key, unified billing, model swaps without code changes |
 | Telegram over Slack | Free, instant, no OAuth, unlimited history, personal tool fit |
 | Citations mandatory from day 1 | Groundedness is the product's primary trust signal |

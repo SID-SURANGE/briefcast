@@ -2,7 +2,7 @@ import os
 import time
 
 import structlog
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from app.config import settings
@@ -27,6 +27,8 @@ log.info("responder.tracing", enabled=_tracing_enabled, project=settings.langsmi
 _MODEL = "anthropic/claude-sonnet-4-6"
 _COST_PER_INPUT_TOKEN = 3.00 / 1_000_000
 _COST_PER_OUTPUT_TOKEN = 15.00 / 1_000_000
+_COST_PER_CACHE_READ_TOKEN = 0.30 / 1_000_000   # 90% cheaper than full input
+_COST_PER_CACHE_WRITE_TOKEN = 3.75 / 1_000_000  # 25% more expensive, paid once
 
 _SYSTEM_PROMPT = (
     "You are a precise AI research assistant answering questions from a personal briefing corpus. "
@@ -38,22 +40,25 @@ _SYSTEM_PROMPT = (
     "- Do not mention that you are using a corpus or context — answer naturally."
 )
 
-# LCEL chain: prompt → Sonnet via OpenRouter.
-# When LANGCHAIN_TRACING_V2=true this chain is automatically traced in LangSmith,
-# capturing the full prompt (with retrieved context), token usage, and latency.
+# System message with cache_control so the static system prompt is cached across queries.
+# Anthropic's prompt cache has a 5-min TTL — any query within that window gets a cache hit.
+_CACHED_SYSTEM_MESSAGE = SystemMessage(content=[
+    {"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+])
+
+# anthropic-beta header opts this model into prompt caching via OpenRouter.
 _llm = ChatOpenAI(
     model=_MODEL,
     openai_api_key=settings.openrouter_api_key,
     openai_api_base="https://openrouter.ai/api/v1",
     max_tokens=800,
     temperature=0.1,
-    default_headers={"HTTP-Referer": settings.openrouter_app_referer},
+    default_headers={
+        "HTTP-Referer": settings.openrouter_app_referer,
+        "anthropic-beta": "prompt-caching-2024-07-31",
+    },
 )
 
-_prompt = ChatPromptTemplate.from_messages([
-    ("system", _SYSTEM_PROMPT),
-    ("human", "Context:\n{context}\n\nQuestion: {query}"),
-])
 
 def _build_context_block(articles: list[dict]) -> str:
     if not articles:
@@ -70,11 +75,18 @@ def _build_context_block(articles: list[dict]) -> str:
 
 async def respond(query: str) -> str:
     """
-    Embed query → retrieve from pgvector → generate grounded answer via LCEL chain.
+    Embed query → retrieve from pgvector → generate grounded answer via Claude Sonnet.
 
-    The prompt | llm chain is traced end-to-end in LangSmith (full prompt with
-    retrieved context, token counts, latency). Embedding and retrieval steps are
-    logged via structlog.
+    Flow: embed query → pgvector cosine search (k=10, 14-day window) → build context
+    block → invoke LangChain ChatOpenAI (OpenRouter) with cached system prompt →
+    return Telegram-HTML answer with inline citations.
+
+    Prompt caching: the static system prompt is marked with cache_control=ephemeral.
+    Anthropic caches it for 5 minutes — repeat queries within that window pay ~10% of
+    normal input token cost for the system prompt portion.
+
+    LangSmith tracing: _llm.ainvoke() is automatically traced when LANGSMITH_TRACING=true,
+    capturing the full message list (system + context + query), token counts, and latency.
 
     Returns Telegram-HTML formatted text with inline citations.
     """
@@ -89,21 +101,32 @@ async def respond(query: str) -> str:
 
     context_block = _build_context_block(articles)
 
-    # LCEL chain — traced in LangSmith automatically
+    messages = [
+        _CACHED_SYSTEM_MESSAGE,
+        HumanMessage(content=f"Context:\n{context_block}\n\nQuestion: {query}"),
+    ]
+
+    # _llm.ainvoke is traced in LangSmith automatically when tracing is enabled
     t0 = time.monotonic()
-    ai_message = await (_prompt | _llm).ainvoke({
-        "context": context_block,
-        "query": query,
-    })
+    ai_message = await _llm.ainvoke(messages)
     latency_ms = (time.monotonic() - t0) * 1000
 
     answer: str = ai_message.content
 
-    # Cost logging via structlog — feeds cost_report.py
-    usage = getattr(ai_message, "usage_metadata", None) or {}
-    input_tokens: int = usage.get("input_tokens", 0)
-    output_tokens: int = usage.get("output_tokens", 0)
-    cost = input_tokens * _COST_PER_INPUT_TOKEN + output_tokens * _COST_PER_OUTPUT_TOKEN
+    # Cost logging — cache reads are 90% cheaper than full input tokens
+    usage = getattr(ai_message, "usage_metadata", None)
+    input_tokens: int = getattr(usage, "input_tokens", 0) if usage else 0
+    output_tokens: int = getattr(usage, "output_tokens", 0) if usage else 0
+    details = getattr(usage, "input_token_details", None)
+    cache_read_tokens: int = getattr(details, "cache_read", 0) if details else 0
+    cache_write_tokens: int = getattr(details, "cache_creation", 0) if details else 0
+    billed_input = input_tokens - cache_read_tokens - cache_write_tokens
+    cost = (
+        billed_input * _COST_PER_INPUT_TOKEN
+        + cache_read_tokens * _COST_PER_CACHE_READ_TOKEN
+        + cache_write_tokens * _COST_PER_CACHE_WRITE_TOKEN
+        + output_tokens * _COST_PER_OUTPUT_TOKEN
+    )
 
     log_llm_call(
         model=_MODEL,
@@ -114,5 +137,11 @@ async def respond(query: str) -> str:
         estimated_cost_usd=cost,
         source="query",
     )
-    log.info("responder.done", context_articles=len(articles), latency_ms=round(latency_ms, 1))
+    log.info(
+        "responder.done",
+        context_articles=len(articles),
+        latency_ms=round(latency_ms, 1),
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+    )
     return answer
