@@ -117,7 +117,7 @@ def _build_user_prompt(articles: list[dict[str, Any]]) -> str:
 _TELEGRAM_INLINE_TAGS = ["b", "i", "u", "s", "code", "pre"]
 
 
-def _close_open_tags(text: str) -> str:
+def close_open_tags(text: str) -> str:
     """Close any inline HTML tags left open by a truncated LLM response."""
     open_tags: list[str] = []
     for m in re.finditer(r"<(/?)(\w+)[^>]*>", text):
@@ -202,6 +202,6 @@ async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str]]:
         estimated_cost_usd=cost,
         source="briefing",
     )
-    text = _close_open_tags(text)
+    text = close_open_tags(text)
     log.info("composer.done", selected=len(selected), latency_ms=round(latency_ms, 1))
     return text, source_keys

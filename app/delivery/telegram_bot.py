@@ -6,7 +6,7 @@ from telegram import Bot, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
-from app.briefing.composer import COMPANY_GROUPS
+from app.briefing.composer import COMPANY_GROUPS, close_open_tags
 from app.config import settings
 
 log = structlog.get_logger()
@@ -18,7 +18,6 @@ _COMMANDS = [
 ]
 
 _TELEGRAM_MAX_CHARS = 4096
-_TRUNCATION_NOTICE = "\n\n<i>…briefing truncated — see Railway logs for full output</i>"
 
 # Display label and emoji per company key — used for drill-down buttons and headers
 _COMPANY_DISPLAY: dict[str, tuple[str, str]] = {
@@ -48,13 +47,33 @@ def _build_drill_keyboard(source_keys: list[str]) -> InlineKeyboardMarkup | None
     return InlineKeyboardMarkup(rows)
 
 
+def _trim_to_last_article(text: str) -> str:
+    """Cut at the last double-newline before the Telegram limit, then strip any orphaned
+    company header that has no article body (no read link) below it."""
+    if len(text) <= _TELEGRAM_MAX_CHARS:
+        return text
+
+    boundary = text.rfind("\n\n", 0, _TELEGRAM_MAX_CHARS)
+    trimmed = text[:boundary].rstrip() if boundary != -1 else text[:_TELEGRAM_MAX_CHARS]
+
+    # If the last section has no 🔗 link it's a bare company header — remove it too
+    prev = trimmed.rfind("\n\n")
+    last_section = trimmed[prev:] if prev != -1 else trimmed
+    if "🔗" not in last_section:
+        trimmed = trimmed[:prev].rstrip() if prev != -1 else ""
+
+    return close_open_tags(trimmed)
+
+
 async def send_briefing(text: str, source_keys: list[str] | None = None) -> None:
     """Send the daily briefing with optional drill-down buttons per company."""
-    if len(text) > _TELEGRAM_MAX_CHARS:
-        cutoff = _TELEGRAM_MAX_CHARS - len(_TRUNCATION_NOTICE)
-        text = text[:cutoff] + _TRUNCATION_NOTICE
-        log.warning("telegram.briefing_truncated", original_len=len(text))
+    original_len = len(text)
+    text = _trim_to_last_article(text)
+    if len(text) < original_len:
+        log.warning("telegram.briefing_truncated", original_len=original_len, trimmed_len=len(text))
     keyboard = _build_drill_keyboard(source_keys or [])
+    if keyboard:
+        text = text + "\n\n<i>Tap a source to see all their articles today ↓</i>"
     async with Bot(token=settings.telegram_bot_token) as bot:
         await bot.send_message(
             chat_id=settings.telegram_chat_id,
