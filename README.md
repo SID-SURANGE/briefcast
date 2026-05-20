@@ -191,7 +191,7 @@ briefcast/
 
 ```powershell
 # 1. Clone and set up virtual environment
-git clone https://github.com/your-username/briefcast.git
+git clone https://github.com/SID-SURANGE/briefcast.git
 cd briefcast
 python -m venv .venv
 .venv\Scripts\pip install -e ".[dev]"
