@@ -126,7 +126,7 @@ All models are routed through **OpenRouter** — unified billing, no per-provide
 Two separate concerns, kept separate by design:
 
 ### LangSmith — RAG tracing
-The RAG query path (`app/rag/responder.py`) is built as a **LangChain LCEL chain** (`prompt | llm | parser`). When `LANGCHAIN_TRACING_V2=true`, every query is traced end-to-end in [LangSmith](https://smith.langchain.com):
+The RAG query path (`app/rag/responder.py`) is built as a **LangChain LCEL chain** (`prompt | llm | parser`). When `LANGSMITH_TRACING=true`, every query is traced end-to-end in [LangSmith](https://smith.langchain.com):
 
 - Full prompt sent to Sonnet (including all retrieved context articles)
 - Token counts and latency per call
@@ -199,7 +199,7 @@ python -m venv .venv
 # 2. Configure credentials
 copy .env.example .env
 # Fill in: OPENROUTER_API_KEY, NOMIC_API_KEY, TELEGRAM_BOT_TOKEN,
-#          TELEGRAM_CHAT_ID, DATABASE_URL, LANGCHAIN_API_KEY
+#          TELEGRAM_CHAT_ID, DATABASE_URL, LANGSMITH_API_KEY
 
 # 3. Start Postgres with pgvector
 docker compose up -d db

@@ -86,34 +86,46 @@ alembic upgrade head
 
 LangSmith traces every LangChain LCEL call (RAG chains). Free tier gives 5,000 traces/month — enough for personal use. All three variables are needed together; leave all unset to disable tracing entirely.
 
-### `LANGCHAIN_TRACING_V2`
+### `LANGSMITH_TRACING`
 
 ```
-LANGCHAIN_TRACING_V2=true
+LANGSMITH_TRACING=true
 ```
 
 Set to `true` to enable. Omit or set to `false` to disable (no traces sent, no API key needed).
 
 ---
 
-### `LANGCHAIN_API_KEY`
+### `LANGSMITH_API_KEY`
 
 1. Go to [smith.langchain.com](https://smith.langchain.com) and sign up.
 2. Navigate to **Settings** → **API Keys** → **Create API Key**.
 3. Copy the key (starts with `lsv2_...`).
 
 ```
-LANGCHAIN_API_KEY=lsv2_pt_...
+LANGSMITH_API_KEY=lsv2_pt_...
 ```
 
 ---
 
-### `LANGCHAIN_PROJECT`
+### `LANGSMITH_PROJECT`
 
 The project name that groups traces in the LangSmith UI. Use any string — `briefcast-dev` is a sensible default.
 
 ```
-LANGCHAIN_PROJECT=briefcast-dev
+LANGSMITH_PROJECT=briefcast-dev
+```
+
+---
+
+### `LANGSMITH_ENDPOINT`
+
+The regional API endpoint for your LangSmith account. Check your LangSmith portal for the correct URL.
+
+```
+LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com   # APAC
+# or
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com        # US (default)
 ```
 
 ---
@@ -146,9 +158,10 @@ TELEGRAM_BOT_TOKEN=123456789:ABCdef...
 DATABASE_URL=postgresql+psycopg://briefcast:briefcast@localhost:5432/briefcast
 
 # LangSmith
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=lsv2_pt_...
-LANGCHAIN_PROJECT=briefcast-dev
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_...
+LANGSMITH_PROJECT=briefcast-dev
+LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com
 
 # Tuning
 DEDUP_THRESHOLD=0.92

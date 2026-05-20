@@ -155,7 +155,7 @@ async def compose(articles: list[dict[str, Any]]) -> str:
                 headers={
                     "Authorization": f"Bearer {settings.openrouter_api_key}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://github.com/briefcast",
+                    "HTTP-Referer": settings.openrouter_app_referer,
                 },
                 json={
                     "model": _MODEL,

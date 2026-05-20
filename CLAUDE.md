@@ -320,6 +320,7 @@ LANGSMITH_PROJECT         # e.g. "briefcast-dev"
 LANGSMITH_TRACING         # set to "true"
 LANGSMITH_ENDPOINT        # https://apac.api.smith.langchain.com (APAC) or https://api.smith.langchain.com (US)
 DEDUP_THRESHOLD=0.92      # plain number only — pydantic-settings cannot parse inline comments
+OPENROUTER_APP_REFERER=https://github.com/your-username/briefcast   # shown in OpenRouter dashboard
 ```
 
 ### Budget
@@ -617,7 +618,7 @@ python -m venv .venv
 # 3. Copy and fill in credentials
 copy .env.example .env
 # Edit .env — set OPENROUTER_API_KEY, NOMIC_API_KEY, TELEGRAM_BOT_TOKEN,
-# DATABASE_URL, LANGCHAIN_API_KEY, LANGCHAIN_TRACING_V2, LANGCHAIN_PROJECT
+# DATABASE_URL, LANGSMITH_API_KEY, LANGSMITH_TRACING, LANGSMITH_PROJECT, LANGSMITH_ENDPOINT
 # DEDUP_THRESHOLD=0.92  ← set a plain number, no inline comments
 
 # 4. Start Postgres (pgvector image — pulls on first run)

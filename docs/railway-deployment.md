@@ -67,9 +67,10 @@ OPENROUTER_API_KEY=sk-or-v1-...
 NOMIC_API_KEY=nk-...
 TELEGRAM_BOT_TOKEN=<your bot token>
 TELEGRAM_CHAT_ID=<your numeric chat ID>
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=lsv2_pt_...
-LANGCHAIN_PROJECT=briefcast-prod
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_...
+LANGSMITH_PROJECT=briefcast-prod
+LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com
 DEDUP_THRESHOLD=0.92
 ```
 

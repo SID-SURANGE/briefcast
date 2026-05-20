@@ -104,6 +104,14 @@ Yes, technically. Using Gemini Flash everywhere cuts cost to ~$0.50/month. The r
 
 k=10 is the standard starting point for RAG systems of this corpus size. Calibrate against retrieval recall@k once you have labelled QA pairs.
 
+**Q: Why use an LLM to classify article relevance instead of a keyword list?**
+
+A hardcoded keyword list breaks on anything outside its vocabulary — "Google I/O 2026", "Project Astra", new model names, new company names. It requires a code change every time the AI landscape evolves. The LLM classifier (`app/ingestion/classifier.py`) uses Gemini Flash with a deterministic prompt (temperature=0.0) to answer "is this AI-relevant?" for any title and snippet. Cost is ~$0.000001 per article — negligible. It fails open (returns `True` on API error) so a transient failure never silently drops a real article. The classifier runs after L1 hash dedup and before the embed call, preserving cost ordering: free check → cheap check → paid operations.
+
+**Q: The briefing uses a 36-hour window but ranking and RAG use 14 days — why different?**
+
+These serve different purposes. The briefing is a *daily news digest* — it should only contain articles published since the previous briefing. Using the full 14-day window caused high-scoring Tier 1 articles to reappear on consecutive days (their recency score decays slowly: day-old article still scores ~0.93 recency). The 36-hour window is 24h + 12h buffer to absorb ingestion lag — if an article is published at 11pm and ingestion runs every 6h, it might not land in the DB until the next cycle. Ranking and RAG keep the 14-day window: ranking needs the full corpus to compute pairwise novelty, and RAG must answer questions about anything in the rolling knowledge base.
+
 **Q: Why a 14-day rolling window for both retrieval and ranking? Why not 30 days or 7 days?**
 
 14 days is the minimum corpus depth that makes the RAG useful for follow-up questions on stories that broke over a weekend or evolved over a week. At 7 days, a story published 8 days ago becomes unretrievable even if it's still the most important development of the month. At 30 days, the corpus grows to ~1,000+ articles and cosine distance loses precision as the vector space becomes crowded with older, lower-relevance content. 14 days also aligns with Briefcast's "AI moves fast" premise — anything older than two weeks is background knowledge, not current intelligence.

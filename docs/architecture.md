@@ -36,7 +36,7 @@ flowchart TD
         direction TB
         FETCH["feedparser + httpx\nRSS / Atom / arXiv API fetch"]
         L1["Dedup L1\nURL SHA-256 hash · O(1)"]
-        KW["AI keyword filter\ntitle must match AI/ML terms"]
+        KW["LLM relevance classifier\nGemini Flash · YES/NO · fails open"]
         L2["Dedup L2\nCosine similarity of title embedding\nthreshold 0.92 · window 500 recent"]
         CB["Circuit Breaker\n3 failures → degraded → Telegram alert"]
 

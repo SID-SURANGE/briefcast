@@ -47,7 +47,7 @@ _llm = ChatOpenAI(
     openai_api_base="https://openrouter.ai/api/v1",
     max_tokens=800,
     temperature=0.1,
-    default_headers={"HTTP-Referer": "https://github.com/briefcast"},
+    default_headers={"HTTP-Referer": settings.openrouter_app_referer},
 )
 
 _prompt = ChatPromptTemplate.from_messages([

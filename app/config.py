@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     langsmith_project: str = "briefcast-dev"
     langsmith_tracing: str = "false"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
+    openrouter_app_referer: str = "https://github.com/briefcast"
     dedup_threshold: float = 0.92
 
 

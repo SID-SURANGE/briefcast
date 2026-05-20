@@ -11,6 +11,7 @@ from app.briefing.composer import compose
 from app.db import SessionLocal
 from app.delivery.telegram_bot import send_alert, send_briefing
 from app.ingestion.circuit_breaker import record_failure, record_success
+from app.ingestion.classifier import is_ai_relevant
 from app.ingestion.dedup import is_duplicate, l1_hash
 from app.ingestion.fetcher import fetch_arxiv, fetch_rss
 from app.models.article import Article
@@ -22,23 +23,7 @@ from app.ranking.ranker import rank
 
 log = structlog.get_logger()
 
-_ITEM_TIMEOUT_S = 90  # max seconds per article: embed + summarise + embed
-
-_AI_KEYWORDS = frozenset({
-    "ai", "artificial intelligence", "machine learning", "deep learning", "neural",
-    "llm", "large language model", "foundation model", "transformer", "diffusion",
-    "generative", "gemini", "gpt", "claude", "mistral", "llama", "qwen", "deepseek",
-    "model", "benchmark", "training", "inference", "fine-tun", "rlhf", "alignment",
-    "multimodal", "embedding", "vector", "rag", "agent", "reasoning", "hallucination",
-    "token", "parameter", "dataset", "evaluation", "openai", "anthropic", "deepmind",
-    "hugging face", "research", "paper", "arxiv",
-})
-
-
-def _is_ai_relevant(title: str) -> bool:
-    """Return True if the article title contains at least one AI-related keyword."""
-    lower = title.lower()
-    return any(kw in lower for kw in _AI_KEYWORDS)
+_ITEM_TIMEOUT_S = 90  # max seconds per article: classify + embed + summarise + embed
 
 
 async def _ingest_source(source_id: int) -> int:
@@ -79,13 +64,14 @@ async def _ingest_source(source_id: int) -> int:
         new_count = 0
         for idx, item in enumerate(items, start=1):
             try:
-                # L1 check before paying for an embed call
+                # L1 check: free hash lookup before any API call
                 h = l1_hash(item["url"])
                 if db.query(Article).filter(Article.dedup_hash == h, Article.deleted_at.is_(None)).first():
                     log.debug("worker.item_skip_l1", source=source.name, idx=idx, total=len(items))
                     continue
 
-                if not _is_ai_relevant(item["title"]):
+                snippet = item.get("abstract") or item.get("summary") or ""
+                if not await is_ai_relevant(item["title"], snippet):
                     log.debug("worker.item_skip_irrelevant", source=source.name, title=item["title"][:80])
                     continue
 
@@ -203,7 +189,9 @@ async def run_ranking() -> None:
 
 async def run_briefing() -> None:
     """Select top-ranked articles, compose via Haiku, deliver via Telegram. Runs at 03:30 UTC (09:00 IST)."""
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=14)
+    # 36h window: covers today's articles + 12h buffer for ingestion lag.
+    # The 14-day window is for RAG only — briefing must only show fresh articles.
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=36)
     db = SessionLocal()
     try:
         articles = (
