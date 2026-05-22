@@ -34,7 +34,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 > **Keep this section current.** Update it at the end of every session or after every feature lands.
 > Claude reads this first — an accurate status here avoids redundant codebase exploration.
 
-### What is built and working (as of 2026-05-19)
+### What is built and working (as of 2026-05-22)
 
 | Layer | File(s) | Status |
 |---|---|---|
@@ -59,6 +59,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Source seeding | `scripts/seed_sources.py` | ✅ 8/8 sources seeded into Railway Postgres |
 | One-shot ingestion | `scripts/run_ingestion_once.py` | ✅ first live ingestion running against Railway DB (in progress 2026-05-19) |
 | Alembic env | `alembic/env.py` | ✅ URL scheme normalised; migrations run clean on Railway |
+| Classifier | `app/ingestion/classifier.py` | ✅ LLM-based relevance filter (Gemini Flash); YES/NO; narrowed to model releases, research, system design, observability tools |
 | Tests | `tests/test_dedup.py`, `test_ranker.py`, `test_retriever.py` | ✅ 32/32 passing |
 | Railway deployment | API + Worker services | ✅ both deployed; API public domain active |
 
@@ -102,94 +103,43 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 - Use Plan mode (`/plan`) before any task touching more than 2 files
 - Review every generated code block before running it — do not trust blindly
 - Write ADRs with Claude Code assistance, then correct manually — the reasoning habit is the goal
+- Use `/clear` between unrelated tasks to reset context; long mixed sessions degrade output quality
 
----
-
-## Certification Alignment — Claude Architect Exam
-
-This project maps directly to the Claude Architect Certification exam domains (approximate weights):
-
-| Exam Domain | ~Weight | How this project covers it |
-|---|---|---|
-| Agentic Architecture | 27% | Ingestion → dedup → summarise → rank → brief → RAG is a multi-step agentic pipeline. ADRs document every decision. |
-| Prompt Engineering | 20% | Summarisation prompt (Gemini Flash), briefing composition prompt (Haiku), RAG system prompt (Sonnet) with mandatory citations. Prompts versioned in `decisions/`. |
-| Claude Code | 20% | All development via Claude Code VS Code extension. CLAUDE.md is the live agent context. |
-| Tool Design & MCP | 18% | Source connectors as tools. RAG retriever as a tool. Telegram delivery as a tool. MCP server for source registry planned for v2. |
-| Context Management & Reliability | 15% | Circuit breakers, 14-day rolling window, dedup threshold, structured logging, CLAUDE.md context discipline. |
-
-**Daily learning habit:** Before implementing anything, ask Claude Code to explain the design decision.
-After each ADR, ask Claude Code to map the decision to an exam domain.
-Weekly: ask Claude Code to summarise architectural patterns used and how they map to exam domains.
-
-Exam resources: claudecertifications.com — free study guide, practice questions, prep plan.
+**When compacting context:** always preserve the list of modified files, the current "What is built" status table, any Railway env var names, and active test commands.
 
 ---
 
 ## Source Universe — Tiered, Google-First
 
-Classification tags: `verified-official` | `verify-before-enabling` | `optional-connector` | `excluded`
+All sources use Mode A (summary + metadata) unless noted. Storage mode B = abstract stored (arXiv only).
+New source checklist: (a) URL tested live · (b) ToS reviewed · (c) classification tag assigned · (d) storage mode set.
 
-### TIER 1 — Google AI Family (highest priority, v1 required)
-Briefing ranks these above all others. Alert via Telegram immediately if any Tier 1 feed breaks.
+### Active Sources (v1)
 
-| Source | Ingestion | Feed / Endpoint | Classification | Storage Mode |
-|---|---|---|---|---|
-| Google AI Blog | RSS | `https://blog.google/technology/ai/rss/` | `verify-before-enabling` | Mode A |
-| Google Research Blog | RSS | `https://research.google/blog/rss/` | `verify-before-enabling` | Mode A |
-| Google Cloud AI Blog | RSS | `https://cloudblog.withgoogle.com/rss/` | `verify-before-enabling` — filter AI/ML tags | Mode A |
-| Google DeepMind Blog | RSS | `https://deepmind.google/blog/rss.xml` | `verify-before-enabling` — path uncertain | Mode A |
-
-All four Google feeds are believed correct based on references but must be tested live.
-If a feed path is wrong, check the source page for a canonical `/feed` or `/rss` link first.
-
-### TIER 2 — Major Western AI Labs (v1 required)
-
-| Source | Ingestion | Feed / Endpoint | Classification | Storage Mode |
-|---|---|---|---|---|
-| Anthropic | RSS | No confirmed native feed. Check `anthropic.com/news` for feed link. `[VERIFY]` | `verify-before-enabling` | Mode A |
-| OpenAI | RSS | `https://openai.com/news/rss/` — has changed historically `[VERIFY]` | `verify-before-enabling` | Mode A |
-| Hugging Face Blog | RSS | `https://huggingface.co/blog/feed.xml` `[VERIFY live]` | `verify-before-enabling` | Mode A |
-| Meta AI Blog | RSS | `https://ai.meta.com/blog/rss/` `[VERIFY]` | `verify-before-enabling` | Mode A |
-| Mistral AI | RSS | Check `mistral.ai/news` for `/rss` or `/feed` path. No confirmed URL. `[VERIFY]` | `verify-before-enabling` | Mode A |
-| Cohere Blog | RSS | Check `cohere.com/blog` for feed path. No confirmed URL. `[VERIFY]` | `verify-before-enabling` | Mode A |
-| Microsoft AI Blog | RSS | `https://blogs.microsoft.com/ai/feed/` | `verified-official` | Mode A |
-| NVIDIA Blog | RSS | `https://blogs.nvidia.com/feed/` | `verified-official` | Mode A |
-| Arxiv cs.AI + cs.LG | Official API | `https://export.arxiv.org/api/query` — public, no auth needed | `verified-official` | Mode B |
-
-### TIER 3 — Major Open-Weight / Global Labs (v1.5 — add after MVP is stable)
-Strategic importance is high in 2026. Use only globally accessible official channels.
-
-| Source | Ingestion | Notes | Storage Mode |
+| Tier | Source | Feed / Endpoint | Status |
 |---|---|---|---|
-| DeepSeek | GitHub Releases API | `github.com/deepseek-ai` releases `[VERIFY]` | Mode A |
-| Qwen / Alibaba | HuggingFace + GitHub | `github.com/QwenLM`, `huggingface.co/Qwen` `[VERIFY]` | Mode A |
-| Kimi / Moonshot AI | GitHub Releases + blog | `github.com/MoonshotAI`, `kimi.com/blog` `[VERIFY access]` | Mode A |
-| ERNIE / Baidu | Official blog | `ernie.baidu.com/blog` — confirm feed and terms first `[VERIFY]` | Mode A |
+| 1 | Google AI Blog | `https://blog.google/technology/ai/rss/` | verify live |
+| 1 | Google Research Blog | `https://research.google/blog/rss/` | verify live |
+| 1 | Google Cloud AI Blog | `https://cloudblog.withgoogle.com/rss/` | verify live — filter AI/ML tags |
+| 1 | Google DeepMind Blog | `https://deepmind.google/blog/rss.xml` | verify live |
+| 2 | OpenAI | `https://openai.com/news/rss.xml` | verified (rss/ path returns 403) |
+| 2 | Meta AI Blog | `https://engineering.fb.com/feed/` | verified (ai.meta.com/blog/rss/ returns 404) |
+| 2 | Hugging Face Blog | `https://huggingface.co/blog/feed.xml` | verify live |
+| 2 | Microsoft AI Blog | `https://blogs.microsoft.com/ai/feed/` | verified |
+| 2 | NVIDIA Blog | `https://blogs.nvidia.com/feed/` | verified |
+| 2 | Arxiv cs.AI + cs.LG | `https://export.arxiv.org/api/query` | verified · Mode B |
 
-**Policy for global sources:** Prefer GitHub, HuggingFace model cards, official English blogs.
-Do not use region-restricted endpoints or channels requiring country-specific auth.
-If access pattern, terms, or feed stability are unclear: exclude from v1.
+### Planned Sources
 
-### TIER 4 — High-Signal Newsletters (v1.5 — add after MVP is stable)
+| Tier | Source | Notes | Version |
+|---|---|---|---|
+| 2 | Anthropic | No native feed confirmed — check `anthropic.com/news` | v1 |
+| 2 | Mistral AI | Check `mistral.ai/news` for feed path | v1 |
+| 3 | DeepSeek / Qwen / Kimi | GitHub Releases + HuggingFace — verify access + ToS | v1.5 |
+| 4 | Import AI · Ahead of AI · The Gradient | Substack/RSS — verify | v1.5 |
+| v2 | X / Twitter | `TWITTER_BEARER_TOKEN` required · store URL + handle + summary only | v2 |
 
-| Source | Ingestion | Feed |
-|---|---|---|
-| Import AI (Jack Clark) | Substack RSS | `https://importai.substack.com/feed` `[VERIFY]` |
-| Ahead of AI (Raschka) | Substack RSS | `https://magazine.sebastianraschka.com/feed` `[VERIFY]` |
-| The Gradient | RSS | `https://thegradient.pub/rss/` `[VERIFY]` |
-
-### OPTIONAL CONNECTORS (user-credential-gated, v2)
-
-| Source | Notes |
-|---|---|
-| X / Twitter API v2 | Pay-per-use, no free tier. Disabled by default. User supplies `TWITTER_BEARER_TOKEN`. Lives in `app/connectors/twitter/` isolated from core. Store: URL, author handle, our summary — never raw tweet text. |
-| GitHub Starred repos | User supplies repo list. GitHub Releases API, official. Rate limit 5,000 req/hr authenticated. |
-
-### EXCLUDED FROM ALL VERSIONS
-- HTML scraping of any source
-- Paywalled sources (MIT Tech Review full text, Nature, etc.)
-- Sources requiring region-restricted credentials or unstable non-public endpoints
-- Any source whose ToS prohibits automated access
+**Hard exclusions:** HTML scraping · paywalled sources · region-restricted endpoints · sources prohibiting automated access.
 
 ---
 

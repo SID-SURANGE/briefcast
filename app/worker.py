@@ -56,8 +56,10 @@ async def _ingest_source(source_id: int) -> int:
             record_failure(source.name, db)
             if source.circuit_breaker_state == "degraded":
                 await send_alert(
-                    f"Source '{source.name}' circuit breaker tripped — "
-                    f"{source.consecutive_failures} consecutive failures."
+                    f"<b>{source.name}</b> has been paused after "
+                    f"{source.consecutive_failures} failed fetches in a row.\n\n"
+                    f"It will be skipped until the source recovers. "
+                    f"Check the feed URL or source availability."
                 )
             return 0
 
