@@ -91,6 +91,7 @@ async def send_alert(text: str) -> None:
         await bot.send_message(
             chat_id=settings.telegram_chat_id,
             text=f"⚠️ {text}",
+            parse_mode="HTML",
         )
     log.info("telegram.alert_sent")
 
