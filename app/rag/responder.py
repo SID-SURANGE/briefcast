@@ -10,6 +10,7 @@ from app.db import SessionLocal
 from app.observability.logger import log_llm_call
 from app.processing.embedder import embed
 from app.rag.retriever import retrieve
+from app.rag.web_searcher import build_web_context, search_web
 
 log = structlog.get_logger(__name__)
 
@@ -30,11 +31,17 @@ _COST_PER_OUTPUT_TOKEN = 15.00 / 1_000_000
 _COST_PER_CACHE_READ_TOKEN = 0.30 / 1_000_000   # 90% cheaper than full input
 _COST_PER_CACHE_WRITE_TOKEN = 3.75 / 1_000_000  # 25% more expensive, paid once
 
+# Minimum cosine similarity to treat a retrieved article as relevant.
+# Below this, results are semantically unrelated — treat as corpus miss.
+_MIN_SIMILARITY = 0.35
+
 _SYSTEM_PROMPT = (
-    "You are a precise AI research assistant answering questions from a personal briefing corpus. "
+    "You are a precise AI research assistant. "
     "Rules:\n"
     "- Cite every factual claim inline as <a href=\"URL\">Source Name</a>.\n"
-    "- If the provided context is insufficient, say so — do not hallucinate facts.\n"
+    "- NEVER answer from your training knowledge — only from the provided context.\n"
+    "- If context is empty or off-topic, say exactly: "
+    "\"I don't have recent data on this topic. Try rephrasing or check back after the next ingestion.\"\n"
     "- Answer in 3–6 sentences unless the question genuinely requires more.\n"
     "- Format output as Telegram HTML: <b>key terms</b>, inline citation links as above.\n"
     "- Do not mention that you are using a corpus or context — answer naturally."
@@ -60,9 +67,7 @@ _llm = ChatOpenAI(
 )
 
 
-def _build_context_block(articles: list[dict]) -> str:
-    if not articles:
-        return "No relevant articles found in the last 14 days."
+def _build_corpus_context(articles: list[dict]) -> str:
     lines = []
     for i, a in enumerate(articles, 1):
         lines.append(
@@ -73,20 +78,26 @@ def _build_context_block(articles: list[dict]) -> str:
     return "\n\n".join(lines)
 
 
-async def respond(query: str) -> str:
+def _has_relevant_results(articles: list[dict]) -> bool:
+    """True if at least one retrieved article clears the similarity threshold."""
+    return bool(articles) and articles[0]["similarity"] >= _MIN_SIMILARITY
+
+
+async def respond(query: str, corpus_only: bool = False) -> str:
     """
     Embed query → retrieve from pgvector → generate grounded answer via Claude Sonnet.
 
-    Flow: embed query → pgvector cosine search (k=10, 14-day window) → build context
-    block → invoke LangChain ChatOpenAI (OpenRouter) with cached system prompt →
-    return Telegram-HTML answer with inline citations.
+    Routing:
+      1. Corpus hit (similarity ≥ _MIN_SIMILARITY) → RAG answer with citations.
+      2. Corpus miss + corpus_only=False + TAVILY_API_KEY set → web search fallback.
+      3. Corpus miss + corpus_only=True → canned "not in corpus" message (no LLM, zero cost).
+      4. Corpus miss + no Tavily key → canned "no data" message (no LLM, zero cost).
 
-    Prompt caching: the static system prompt is marked with cache_control=ephemeral.
-    Anthropic caches it for 5 minutes — repeat queries within that window pay ~10% of
-    normal input token cost for the system prompt portion.
+    corpus_only=True is used by the /ask command so users can explicitly restrict to
+    the ingested corpus without a web fallback.
 
-    LangSmith tracing: _llm.ainvoke() is automatically traced when LANGSMITH_TRACING=true,
-    capturing the full message list (system + context + query), token counts, and latency.
+    Prompt caching: static system prompt marked cache_control=ephemeral (5-min TTL).
+    LangSmith tracing: automatic when LANGSMITH_TRACING=true.
 
     Returns Telegram-HTML formatted text with inline citations.
     """
@@ -99,7 +110,39 @@ async def respond(query: str) -> str:
     finally:
         db.close()
 
-    context_block = _build_context_block(articles)
+    used_web_search = False  # track routing path for logging
+
+    # --- Gate: corpus miss check ---
+    if not _has_relevant_results(articles):
+        best_sim = articles[0]["similarity"] if articles else 0.0
+        log.info(
+            "responder.corpus_miss",
+            best_similarity=best_sim,
+            articles_returned=len(articles),
+            corpus_only=corpus_only,
+        )
+
+        if corpus_only:
+            return (
+                "I don't have recent articles on that topic in my 14-day AI corpus.\n\n"
+                "Try asking without <b>/ask</b> (plain message) to enable live web search, "
+                "or rephrase — e.g. include a company or model name."
+            )
+
+        # Try web search fallback
+        web_results = await search_web(query)
+        if web_results:
+            context_block = build_web_context(web_results)
+            used_web_search = True
+        else:
+            # No corpus, no Tavily key → hard gate, no LLM call
+            return (
+                "I don't have recent articles on that topic in my 14-day AI corpus.\n\n"
+                "Try <b>/chat</b> for a general answer, or ask again after tomorrow's ingestion. "
+                "You can also rephrase — e.g. include a company or model name."
+            )
+    else:
+        context_block = _build_corpus_context(articles)
 
     messages = [
         _CACHED_SYSTEM_MESSAGE,
@@ -111,7 +154,11 @@ async def respond(query: str) -> str:
     ai_message = await _llm.ainvoke(messages)
     latency_ms = (time.monotonic() - t0) * 1000
 
-    answer: str = ai_message.content
+    web_disclaimer = (
+        "\n\n<i>⚡ Answered from live web search — not in my 14-day corpus.</i>"
+        if used_web_search else ""
+    )
+    answer: str = ai_message.content + web_disclaimer
 
     # Cost logging — cache reads are 90% cheaper than full input tokens
     usage = getattr(ai_message, "usage_metadata", None)
@@ -140,6 +187,7 @@ async def respond(query: str) -> str:
     log.info(
         "responder.done",
         context_articles=len(articles),
+        source="web_search" if used_web_search else "corpus",
         latency_ms=round(latency_ms, 1),
         cache_read_tokens=cache_read_tokens,
         cache_write_tokens=cache_write_tokens,

@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     openrouter_app_referer: str = "https://github.com/briefcast"
     dedup_threshold: float = 0.92
+    # Web search fallback (Tavily — free tier: 1,000 searches/month)
+    tavily_api_key: str = ""
+    # Telegram Forum Topics — optional; if set, briefings/alerts post to specific threads.
+    # Create a Supergroup, enable Topics, then get thread IDs from each topic's link.
+    telegram_briefing_thread_id: int | None = None
+    telegram_alert_thread_id: int | None = None
 
 
 settings = Settings()
