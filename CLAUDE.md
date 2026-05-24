@@ -52,9 +52,10 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
 | Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 03:30 UTC (09:00 IST); deployed on Railway |
 | Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
-| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; webhook registered at `@BrfCastBot` |
+| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; webhook at `@BrfCastBot`; thread-aware (Forum Topics ready); smart routing help text |
 | RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
-| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; embed→retrieve→generate; inline HTML citations |
+| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; similarity gate (0.35); corpus miss → Tavily web search fallback; `corpus_only` param for `/ask`; prompt caching |
+| Web searcher | `app/rag/web_searcher.py` | ✅ Tavily API fallback; fail-safe if `TAVILY_API_KEY` unset; `search_web()` + `build_web_context()` |
 | Source registry | `app/ingestion/registry.py` | ✅ 8 sources (4 Tier 1 Google + 4 Tier 2); all URLs verified live |
 | Source seeding | `scripts/seed_sources.py` | ✅ 8/8 sources seeded into Railway Postgres |
 | One-shot ingestion | `scripts/run_ingestion_once.py` | ✅ first live ingestion running against Railway DB (in progress 2026-05-19) |
@@ -81,11 +82,31 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Confirm first ingestion completes | `run_ingestion_once.py` running — watch for `ranker.done` in logs |
 | Trigger manual briefing | Run `run_briefing()` locally pointing at Railway DB to get first Telegram message |
 | Confirm scheduled briefing fires | Daily at 13:00 IST via Railway worker — check Railway worker logs |
+| Add Tavily key to Railway | Set `TAVILY_API_KEY` in Railway dashboard — enables web search fallback for out-of-corpus queries |
 | Monitor first week | Check Railway logs for circuit breaker trips or 402s; run `scripts/cost_report.py` |
+| Forum Topics (optional, v1.5) | Create Telegram Supergroup → enable Topics → get thread IDs → set `TELEGRAM_BRIEFING_THREAD_ID` + `TELEGRAM_ALERT_THREAD_ID` |
+
+### Current BrfCastBot setup — what to do now vs later
+
+**Now (no changes needed):** The bot works as-is in your private chat with `@BrfCastBot`.
+- Plain messages → auto-route: corpus first, Tavily web search fallback if corpus misses
+- `/ask` → corpus-only (no web fallback)
+- `/chat` → direct Haiku LLM, no search
+- Briefings and alerts continue posting to the same private chat (Forum Topics not required)
+
+**Later (v1.5 — Forum Topics):** When you want organised channels instead of one flat chat:
+1. Create a new Telegram Supergroup (not the existing bot chat — bots can't be in private chats as topics)
+2. Group Settings → Enable Topics
+3. Create topics: 📰 Daily Briefing · ⚠️ Alerts · ❓ Ask (optional label — bot replies in-thread anyway)
+4. Add `@BrfCastBot` to the group as admin with "Post Messages" permission
+5. Right-click each topic → Copy Link → extract the integer at the end of the URL
+6. Set `TELEGRAM_BRIEFING_THREAD_ID` and `TELEGRAM_ALERT_THREAD_ID` in Railway
+7. Change `TELEGRAM_CHAT_ID` to the group ID (Telegram group IDs start with `-100`)
+8. No code changes needed — the delivery layer already handles `message_thread_id=None` gracefully
 
 ### Recommended next step
 
-**Trigger a manual briefing** once `run_ingestion_once.py` completes. Point `DATABASE_URL` at the Railway public URL and run `run_briefing()` to verify the full end-to-end loop: Railway DB → composer → Telegram delivery. See `docs/railway-deployment.md` Step 10.
+**Add `TAVILY_API_KEY` to Railway** (get free key at app.tavily.com, takes 2 min). This immediately fixes the "latest model from OpenAI" class of queries. Then **trigger a manual briefing** to verify the full loop.
 
 ---
 
@@ -278,6 +299,9 @@ LANGSMITH_TRACING         # set to "true"
 LANGSMITH_ENDPOINT        # https://apac.api.smith.langchain.com (APAC) or https://api.smith.langchain.com (US)
 DEDUP_THRESHOLD=0.92      # plain number only — pydantic-settings cannot parse inline comments
 OPENROUTER_APP_REFERER=https://github.com/SID-SURANGE/briefcast   # shown in OpenRouter dashboard
+TAVILY_API_KEY            # web search fallback (free tier: 1,000/month at app.tavily.com); leave blank to disable
+TELEGRAM_BRIEFING_THREAD_ID   # optional — Forum Topics supergroup thread ID for daily briefing; unset = main chat
+TELEGRAM_ALERT_THREAD_ID      # optional — Forum Topics supergroup thread ID for alerts; unset = main chat
 ```
 
 ### Budget
