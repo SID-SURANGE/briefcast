@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ---
 
 # Briefcast — personal AI intelligence briefing agent + RAG query-back
-**CLAUDE.md · v1.3 · 2026-05-19**
+**CLAUDE.md · v1.4 · 2026-05-25**
 
 Read this fully at the start of every Claude Code session before writing any code.
 Lines marked `[VERIFY]` must be tested live before the connector is enabled.
@@ -34,7 +34,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 > **Keep this section current.** Update it at the end of every session or after every feature lands.
 > Claude reads this first — an accurate status here avoids redundant codebase exploration.
 
-### What is built and working (as of 2026-05-22)
+### What is built and working (as of 2026-05-25)
 
 | Layer | File(s) | Status |
 |---|---|---|
@@ -52,9 +52,9 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
 | Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 03:30 UTC (09:00 IST); deployed on Railway |
 | Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
-| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; webhook at `@BrfCastBot`; thread-aware (Forum Topics ready); smart routing help text |
+| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; single-path query UX (no /ask or /chat); `/help` only command; Forum Topics ready |
 | RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
-| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; similarity gate (0.35); corpus miss → Tavily web search fallback; `corpus_only` param for `/ask`; prompt caching |
+| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; similarity gate (0.35); corpus miss → Tavily web fallback; dual system prompts (corpus vs web); full LangSmith pipeline tracing; prompt caching |
 | Web searcher | `app/rag/web_searcher.py` | ✅ Tavily API fallback; fail-safe if `TAVILY_API_KEY` unset; `search_web()` + `build_web_context()` |
 | Source registry | `app/ingestion/registry.py` | ✅ 8 sources (4 Tier 1 Google + 4 Tier 2); all URLs verified live |
 | Source seeding | `scripts/seed_sources.py` | ✅ 8/8 sources seeded into Railway Postgres |
@@ -89,9 +89,9 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 ### Current BrfCastBot setup — what to do now vs later
 
 **Now (no changes needed):** The bot works as-is in your private chat with `@BrfCastBot`.
-- Plain messages → auto-route: corpus first, Tavily web search fallback if corpus misses
-- `/ask` → corpus-only (no web fallback)
-- `/chat` → direct Haiku LLM, no search
+- **Just type any question** — single path: corpus first, Tavily web search fallback on miss (⚡ marked)
+- `/help` → shows how the bot works
+- No other commands — `/ask` and `/chat` have been removed (see ADR 011)
 - Briefings and alerts continue posting to the same private chat (Forum Topics not required)
 
 **Later (v1.5 — Forum Topics):** When you want organised channels instead of one flat chat:
@@ -106,7 +106,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 
 ### Recommended next step
 
-**Add `TAVILY_API_KEY` to Railway** (get free key at app.tavily.com, takes 2 min). This immediately fixes the "latest model from OpenAI" class of queries. Then **trigger a manual briefing** to verify the full loop.
+**Verify LangSmith traces appear on Railway.** Check Railway API logs for `responder.tracing enabled=True`. If `enabled=False`, set `LANGSMITH_TRACING=true` in Railway dashboard. Send a plain message to the bot and confirm the `rag_pipeline` run appears in LangSmith with all child spans (embed_query, vector_retrieve, ChatOpenAI).
 
 ---
 
