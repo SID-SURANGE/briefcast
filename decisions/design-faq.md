@@ -118,7 +118,7 @@ These serve different purposes. The briefing is a *daily news digest* — it sho
 
 **Q: What happens when a user asks about something with no relevant documents in the 14-day corpus?**
 
-The retriever returns its top-k by cosine distance regardless — it has no "minimum relevance" floor. The responder's system prompt must instruct the model to declare when retrieved documents do not support the query. Without this instruction, the LLM will hallucinate an answer from training data. This is a prompt engineering responsibility, not a retrieval responsibility — citations are mandatory so the user can verify what was and wasn't actually in the corpus.
+The retriever returns its top-k by cosine distance regardless — it has no "minimum relevance" floor. The responder applies a similarity gate (`_MIN_SIMILARITY = 0.35`): if the top result falls below this threshold, the query is treated as a corpus miss. On a miss, the pipeline falls back to Tavily live web search (if `TAVILY_API_KEY` is set). Tavily results are then passed to the LLM using a topic-agnostic system prompt (not the AI-research-scoped corpus prompt) to avoid false "off-topic" rejections. If Tavily is not configured or returns nothing, a canned "not in corpus" message is returned with zero LLM cost. The ⚡ disclaimer is appended to web-sourced answers so the user knows the source. See ADR 011.
 
 ---
 
@@ -154,7 +154,7 @@ Separation of failure domains. If the worker OOMs on a large ingestion cycle (em
 
 **Q: LangChain is in the dependencies — where is it actually used?**
 
-Only in `app/rag/responder.py`. The RAG query path is implemented as a LangChain LCEL chain (`_prompt | _llm | StrOutputParser()`), which gives automatic LangSmith tracing of the full prompt → generation step. Everything else — summarisation, briefing composition, embedding — uses raw `httpx`. LangChain would add abstraction overhead to batch jobs (summariser runs 50–200 times per ingestion cycle) without adding any value over a direct API call. The LCEL chain is justified only where per-query trace visibility matters: seeing exactly what context was retrieved and fed to the model for a given user question.
+Only in `app/rag/responder.py`. The RAG query path uses `ChatOpenAI` from `langchain_openai` and constructs messages via `langchain_core.messages.SystemMessage` / `HumanMessage`. The LLM is invoked directly with `_llm.ainvoke(messages)` — the LCEL pipe syntax (`_prompt | _llm`) is not used, because `ChatPromptTemplate` cannot attach `cache_control` to a message's content array (required for prompt caching — see ADR 010). Direct message construction is equivalent for LangSmith tracing purposes. Everything else — summarisation, briefing composition, embedding — uses raw `httpx`. LangChain would add abstraction overhead to batch jobs (summariser runs 50–200 times per ingestion cycle) without adding any value over a direct API call. Full pipeline tracing (embed → retrieve → web search → generate) is achieved via `langsmith.traceable` wrappers — see ADR 012.
 
 **Q: Why not LangGraph in v1?**
 

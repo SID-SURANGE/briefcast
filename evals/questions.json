@@ -1,2 +1,122 @@
 [
+  {
+    "id": "q01",
+    "question": "What recent improvements has Google announced for its Gemini AI models?",
+    "ground_truth": "At Google I/O 2026 in May, Google announced Gemini 3.5 Flash — which surpasses Gemini 3.1 Pro in coding, agentic, and multimodal benchmarks with 4x faster output tokens. Google also unveiled Gemini Omni, a new model series that accepts image, audio, video, and text input and can output video. Gemini 3.5 Pro is in testing and expected next month. Earlier in 2026 Google released Gemini 3.1 Pro (February) and Gemma 4 (April), purpose-built for advanced reasoning and agentic workflows.",
+    "expected_sources": ["Google AI Blog", "Google DeepMind Blog", "Google Cloud AI Blog"]
+  },
+  {
+    "id": "q02",
+    "question": "What are the latest large language model releases from OpenAI?",
+    "ground_truth": "OpenAI released GPT-5.5 on April 23, 2026, described as their smartest and most intuitive model yet with variants including GPT-5.5 Thinking and GPT-5.5 Pro. GPT-5.5 Instant became the default ChatGPT model for all users on May 5, 2026, replacing GPT-5.3 Instant — internal evaluations showed 52.5% fewer hallucinated claims on high-stakes prompts. OpenAI also announced GPT-5.5-Cyber on May 7, 2026, a limited-preview variant for vetted cybersecurity teams under its Trusted Access for Cyber program.",
+    "expected_sources": ["OpenAI"]
+  },
+  {
+    "id": "q03",
+    "question": "What new AI research has Google DeepMind published recently?",
+    "ground_truth": "At Google I/O 2026, Google DeepMind launched Gemini for Science — a suite of agentic AI tools to automate labor-intensive phases of scientific research — with same-day peer-reviewed validation in Nature. Two landmark papers published in Nature on May 19, 2026 cover Co-Scientist (a multi-agent system that generates, debates, and evolves scientific hypotheses) and Empirical Research Assistance (ERA), which outperformed the CDC's COVID-19 hospitalization forecasting model. DeepMind's math AI also resolved an open problem in group theory and produced an AI-generated research paper in arithmetic geometry.",
+    "expected_sources": ["Google DeepMind Blog", "Google Research Blog"]
+  },
+  {
+    "id": "q04",
+    "question": "What open-source AI models has Meta released recently?",
+    "ground_truth": "Meta released Llama 4 Scout and Llama 4 Maverick — the first open-weight natively multimodal models using a mixture-of-experts (MoE) architecture. Llama 4 Scout has 17B active parameters with 16 experts and an industry-leading 10M token context window, fitting on a single NVIDIA H100 GPU. Llama 4 Maverick has 17B active parameters with 128 experts and outperforms GPT-4o and Gemini 2.0 Flash on multimodal benchmarks. Both are distilled from Llama 4 Behemoth (288B active parameters, still in training) and are available on Hugging Face.",
+    "expected_sources": ["Meta AI Blog"]
+  },
+  {
+    "id": "q05",
+    "question": "What new AI models or tools has Hugging Face announced?",
+    "ground_truth": "Hugging Face released TRL v1.0 in April 2026, standardising LLM post-training with a unified CLI and trainer workflow covering Supervised Fine-Tuning, Reward Modeling, DPO, GRPO, and KTO alignment algorithms. In robotics, Hugging Face's LeRobot library expanded rapidly following the Pollen Robotics acquisition, with NVIDIA integrating Isaac open models into LeRobot for physical AI. New Hub features include Hub-to-Bucket instant large-file transfers and model size filters on benchmark leaderboards. Agents on the Hub can now train models and interact with Hub APIs directly.",
+    "expected_sources": ["Hugging Face Blog"]
+  },
+  {
+    "id": "q06",
+    "question": "What advances have been made in AI reasoning and chain-of-thought techniques?",
+    "ground_truth": "Recent work on AI reasoning includes chain-of-thought prompting, process reward models, test-time compute scaling, and dedicated reasoning model variants. OpenAI's GPT-5.5 Thinking (released April 2026) and GPT-5.5 Reasoning (available in Microsoft Copilot Studio) extend the o-series approach of thinking step-by-step before answering. Google DeepMind's Gemini Deep Think and Aletheia systems demonstrate reasoning applied to frontier mathematics, resolving open problems in group theory. GRPO and other reinforcement-learning-based reasoning objectives continue to improve open-source model reasoning ability.",
+    "expected_sources": ["Google AI Blog", "Google DeepMind Blog", "Google Research Blog", "OpenAI"]
+  },
+  {
+    "id": "q07",
+    "question": "What are the latest developments in AI for code generation?",
+    "ground_truth": "AI code generation has advanced significantly in 2026, with GPT-5.5 and Gemini 3.5 Flash achieving high scores on coding benchmarks. GitHub Copilot is transitioning to usage-based billing in June 2026, reflecting widespread enterprise adoption. Microsoft integrates GPT-5.5 Thinking into GitHub Copilot for complex reasoning tasks. Gemini 3.5 Flash surpasses Gemini 3.1 Pro on agentic and coding benchmarks. Llama 4 models also demonstrate strong code generation capabilities as fully open-weight options.",
+    "expected_sources": ["Google DeepMind Blog", "Google AI Blog", "OpenAI", "Meta AI Blog"]
+  },
+  {
+    "id": "q08",
+    "question": "What new AI safety and alignment research has been published recently?",
+    "ground_truth": "AI safety research continues to cover RLHF improvements, constitutional AI, scalable oversight, red-teaming, and interpretability. OpenAI launched GPT-5.5-Cyber in May 2026 under the Trusted Access for Cyber program, representing a controlled deployment model for high-risk capabilities. GPT-5.5 Instant's internal evaluations highlighted 52.5% fewer hallucinated claims on high-stakes medical, legal, and financial prompts. Enterprise surveys show 88% of organisations have experienced AI-related security incidents, while only 22% treat AI agents as identity-bearing entities, driving new governance research.",
+    "expected_sources": ["Google DeepMind Blog", "Google AI Blog", "OpenAI"]
+  },
+  {
+    "id": "q09",
+    "question": "What recent advances have been made in multimodal AI models that handle images and text?",
+    "ground_truth": "Multimodal AI has advanced substantially in 2026. Meta's Llama 4 Scout and Maverick are the first open-weight natively multimodal models, accepting images, video, and text with up to 10M token context. Google announced Gemini Omni at I/O 2026 — a new model series combining reasoning with creation, accepting image, audio, video, and text input and generating video output. Gemini 3.5 Flash also advances multimodal benchmarks over its predecessor. These models collectively push cross-modal reasoning, visual understanding, and video generation forward.",
+    "expected_sources": ["Google AI Blog", "Google DeepMind Blog", "OpenAI", "Meta AI Blog"]
+  },
+  {
+    "id": "q10",
+    "question": "What is Google Cloud doing with AI and machine learning infrastructure?",
+    "ground_truth": "Google Cloud has expanded AI infrastructure with Gemini 3.5 Flash and Gemini Omni available via the Gemini API following Google I/O 2026 announcements. Vertex AI continues to integrate the latest Gemini model family for enterprise use. Google is cutting AI Ultra subscription pricing to $200 to broaden access. The Gemini API changelog tracks rolling releases of Gemini 3.1 Flash Lite (March 2026) and Gemini 3.5 Flash (May 2026) for developers. TPU hardware and Cloud AI tooling underpin model serving at scale.",
+    "expected_sources": ["Google Cloud AI Blog"]
+  },
+  {
+    "id": "q11",
+    "question": "What new research on AI agents and autonomous systems has been published?",
+    "ground_truth": "2026 has been called the year AI agents moved from demos to production — over 57% of enterprises now have AI agents deployed. Google I/O 2026 showcased autonomous agents integrated into Search, allowing file uploads, browser tab attachments, and synthesised AI answers. Google DeepMind's Co-Scientist is a multi-agent system that iteratively generates and debates scientific hypotheses. Microsoft's Copilot Studio and Azure AI Foundry now feature agent-first workflows with governance tooling. OpenAI expanded agent mode capabilities for real-world web interactions. Hugging Face agents can now train models and query Hub APIs autonomously.",
+    "expected_sources": ["Google DeepMind Blog", "Google AI Blog", "OpenAI"]
+  },
+  {
+    "id": "q12",
+    "question": "What advances in transformer architecture or attention mechanisms have been published?",
+    "ground_truth": "Recent transformer research includes mixture-of-experts (MoE) architectures seeing broad adoption — Meta's Llama 4 Maverick uses 128 experts with 17B active parameters out of a much larger total, demonstrating efficient scaling. Efficient attention mechanisms, sparse transformers, and scaling laws for inference cost reduction remain active areas. Work on reducing inference cost and memory usage is reflected in Gemini 3.5 Flash's 4x output token throughput advantage. Post-training techniques like GRPO (used in alignment) and improved reward modelling continue to extend transformer capabilities.",
+    "expected_sources": ["Google Research Blog", "Google DeepMind Blog"]
+  },
+  {
+    "id": "q13",
+    "question": "What new AI benchmarks or evaluation frameworks have been introduced?",
+    "ground_truth": "New benchmarks test reasoning, coding, math, safety, and multimodal understanding. Hugging Face's TRL v1.0 codifies post-training evaluation including reward modelling and alignment metrics. Google DeepMind published peer-reviewed benchmarks for Gemini for Science in Nature (May 2026), including ERA outperforming CDC COVID-19 forecasting models. ProEval for generative AI evaluation and Dynamic Reflections for video representations are among recent DeepMind evaluation papers. Model size filters on Hugging Face leaderboards help practitioners compare models by parameter count systematically.",
+    "expected_sources": ["Google Research Blog", "Google AI Blog", "Hugging Face Blog"]
+  },
+  {
+    "id": "q14",
+    "question": "What are the latest developments in AI for scientific discovery?",
+    "ground_truth": "Google DeepMind launched Gemini for Science at Google I/O 2026 — a suite of agentic AI tools automating labor-intensive scientific research phases, validated by peer-reviewed Nature papers published on May 19, 2026. Co-Scientist is a multi-agent system built on Gemini for hypothesis generation and debate. ERA (Empirical Research Assistance) outperformed the CDC's COVID-19 hospitalization forecasting model. DeepMind's math AI resolved an open problem in group theory and produced an AI-generated arithmetic geometry paper. Google DeepMind also partnered with Edison to build an AI Scientist for life sciences.",
+    "expected_sources": ["Google DeepMind Blog", "Google Research Blog"]
+  },
+  {
+    "id": "q15",
+    "question": "What Microsoft AI products or research have been announced recently?",
+    "ground_truth": "Microsoft has integrated GPT-5.5 and GPT-5.5 Thinking (as GPT-5.5 Reasoning) across Microsoft 365 Copilot, GitHub Copilot, Copilot Studio, and Azure AI Foundry. Microsoft is adopting a multi-model strategy — 'Copilot Fabric' routes queries to the optimal engine including GPT-5.5, Claude 4, or Phi-4. Anthropic's Claude models are being integrated into Azure AI Foundry and tested as Copilot backends in Word, Excel, and Teams. GitHub Copilot transitions all plans to usage-based billing on June 1, 2026. Copilot Studio April 2026 updates added governance and intelligent workflow features.",
+    "expected_sources": ["Microsoft AI Blog"]
+  },
+  {
+    "id": "q16",
+    "question": "What new AI hardware or accelerator developments have been announced?",
+    "ground_truth": "NVIDIA's Blackwell architecture (B200 and GB200 GPUs) entered volume production in early 2026, sold out through mid-2026 with a 3.6 million unit backlog. The B200 delivers 20 petaFLOPS of FP4 AI performance and 192GB HBM3e memory — roughly 5x the AI inference performance of H100. NVIDIA also unveiled the Rubin platform, comprising six new chips targeting up to 10x inference token cost reduction versus Blackwell. Google's TPU infrastructure continues to underpin Gemini model serving, with Gemini 3.5 Flash demonstrating 4x faster output token throughput than frontier model peers.",
+    "expected_sources": ["Google Cloud AI Blog", "NVIDIA Blog"]
+  },
+  {
+    "id": "q17",
+    "question": "What advances have been made in retrieval-augmented generation (RAG)?",
+    "ground_truth": "RAG advances include better chunking strategies, hybrid dense-sparse retrieval, reranking, and improved grounding. Systems now better handle multi-hop questions and long document retrieval. Llama 4 Scout's 10M token context window reduces chunking requirements for large document RAG. Agent-based RAG — where agents iteratively retrieve and refine — is gaining adoption, as seen in Google DeepMind's Co-Scientist which retrieves and debates against scientific literature. Hugging Face's TRL v1.0 includes reward modelling that can be applied to grounded generation quality.",
+    "expected_sources": ["Google Research Blog", "Hugging Face Blog"]
+  },
+  {
+    "id": "q18",
+    "question": "What new language models have been released for languages other than English?",
+    "ground_truth": "Multilingual and non-English language models have expanded in 2026. Gemini 3.5 Flash and Llama 4 Scout/Maverick support dozens of languages with improved multilingual benchmarks. Meta's Llama 4 natively multimodal architecture supports cross-lingual image and text understanding. Hugging Face's open-source ecosystem hosts specialist multilingual and low-resource-language models across European, Asian, and African languages. Gemini for Science supports multilingual scientific literature retrieval. Community fine-tunes of Llama 4 targeting non-English languages continue to proliferate on Hugging Face.",
+    "expected_sources": ["Google AI Blog", "Meta AI Blog", "Hugging Face Blog"]
+  },
+  {
+    "id": "q19",
+    "question": "What new fine-tuning or PEFT techniques for language models have been published recently?",
+    "ground_truth": "Hugging Face released TRL v1.0 in April 2026, standardising the post-training pipeline with a unified CLI covering Supervised Fine-Tuning, Reward Modeling, DPO, GRPO, and KTO. GRPO (Group Relative Policy Optimisation) has emerged as a prominent reinforcement-learning alignment objective, widely adopted for reasoning model training. LoRA and QLoRA remain standard parameter-efficient fine-tuning methods; recent work achieves near full fine-tune performance at a fraction of compute. Llama 4's open weights enable community PEFT experiments at frontier-model scale for the first time.",
+    "expected_sources": ["Hugging Face Blog", "Google Research Blog"]
+  },
+  {
+    "id": "q20",
+    "question": "What are the latest AI developments from NVIDIA for machine learning?",
+    "ground_truth": "NVIDIA's Blackwell B200 and GB200 GPUs entered volume production in early 2026, with demand sold out through mid-2026 and a 3.6 million unit backlog from major cloud providers. The B200 uses a dual-die chiplet design with 208 billion transistors, delivering 20 petaFLOPS of FP4 AI performance and 192GB HBM3e per GPU — approximately 5x the AI inference performance of H100. NVIDIA unveiled the Rubin platform (six new chips) targeting a 10x reduction in inference token cost versus Blackwell. NVIDIA also integrated Isaac open models into Hugging Face's LeRobot library for physical AI and robotics.",
+    "expected_sources": ["NVIDIA Blog"]
+  }
 ]

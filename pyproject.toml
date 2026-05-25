@@ -30,6 +30,9 @@ dev = [
     "black>=24.0",
     "isort>=5.13",
     "ruff>=0.4",
+    # Evaluation harness (v1.5) — pin to explodinggradients 0.2.x; 0.3+ is a different fork
+    "ragas>=0.2,<0.3",
+    "datasets>=2.19",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ---
 
 # Briefcast — personal AI intelligence briefing agent + RAG query-back
-**CLAUDE.md · v1.3 · 2026-05-19**
+**CLAUDE.md · v1.4 · 2026-05-25**
 
 Read this fully at the start of every Claude Code session before writing any code.
 Lines marked `[VERIFY]` must be tested live before the connector is enabled.
@@ -34,7 +34,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 > **Keep this section current.** Update it at the end of every session or after every feature lands.
 > Claude reads this first — an accurate status here avoids redundant codebase exploration.
 
-### What is built and working (as of 2026-05-22)
+### What is built and working (as of 2026-05-25)
 
 | Layer | File(s) | Status |
 |---|---|---|
@@ -52,9 +52,9 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
 | Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 03:30 UTC (09:00 IST); deployed on Railway |
 | Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
-| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; webhook at `@BrfCastBot`; thread-aware (Forum Topics ready); smart routing help text |
+| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; single-path query UX (no /ask or /chat); `/help` only command; Forum Topics ready |
 | RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
-| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; similarity gate (0.35); corpus miss → Tavily web search fallback; `corpus_only` param for `/ask`; prompt caching |
+| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; similarity gate (0.35); corpus miss → Tavily web fallback; dual system prompts (corpus vs web); full LangSmith pipeline tracing; prompt caching |
 | Web searcher | `app/rag/web_searcher.py` | ✅ Tavily API fallback; fail-safe if `TAVILY_API_KEY` unset; `search_web()` + `build_web_context()` |
 | Source registry | `app/ingestion/registry.py` | ✅ 8 sources (4 Tier 1 Google + 4 Tier 2); all URLs verified live |
 | Source seeding | `scripts/seed_sources.py` | ✅ 8/8 sources seeded into Railway Postgres |
@@ -62,6 +62,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Alembic env | `alembic/env.py` | ✅ URL scheme normalised; migrations run clean on Railway |
 | Classifier | `app/ingestion/classifier.py` | ✅ LLM-based relevance filter (Gemini Flash); YES/NO; narrowed to model releases, research, system design, observability tools |
 | Tests | `tests/test_dedup.py`, `test_ranker.py`, `test_retriever.py` | ✅ 32/32 passing |
+| Eval harness | `evals/eval_runner.py`, `scripts/run_evals.py` | ✅ RAGAS 4-metric harness (faithfulness, answer_relevancy, context_precision, context_recall); 20 Q&A pairs in `evals/questions.json`; Haiku as judge LLM; reports saved to `evals/reports/` |
 | Railway deployment | API + Worker services | ✅ both deployed; API public domain active |
 
 ### Known verified feed URLs
@@ -84,14 +85,15 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Confirm scheduled briefing fires | Daily at 13:00 IST via Railway worker — check Railway worker logs |
 | Add Tavily key to Railway | Set `TAVILY_API_KEY` in Railway dashboard — enables web search fallback for out-of-corpus queries |
 | Monitor first week | Check Railway logs for circuit breaker trips or 402s; run `scripts/cost_report.py` |
+| Run eval harness | `python scripts/run_evals.py --limit 5` for a smoke test; `python scripts/run_evals.py` for full 20-question run against live Railway DB |
 | Forum Topics (optional, v1.5) | Create Telegram Supergroup → enable Topics → get thread IDs → set `TELEGRAM_BRIEFING_THREAD_ID` + `TELEGRAM_ALERT_THREAD_ID` |
 
 ### Current BrfCastBot setup — what to do now vs later
 
 **Now (no changes needed):** The bot works as-is in your private chat with `@BrfCastBot`.
-- Plain messages → auto-route: corpus first, Tavily web search fallback if corpus misses
-- `/ask` → corpus-only (no web fallback)
-- `/chat` → direct Haiku LLM, no search
+- **Just type any question** — single path: corpus first, Tavily web search fallback on miss (⚡ marked)
+- `/help` → shows how the bot works
+- No other commands — `/ask` and `/chat` have been removed (see ADR 011)
 - Briefings and alerts continue posting to the same private chat (Forum Topics not required)
 
 **Later (v1.5 — Forum Topics):** When you want organised channels instead of one flat chat:
@@ -106,7 +108,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 
 ### Recommended next step
 
-**Add `TAVILY_API_KEY` to Railway** (get free key at app.tavily.com, takes 2 min). This immediately fixes the "latest model from OpenAI" class of queries. Then **trigger a manual briefing** to verify the full loop.
+**Verify LangSmith traces appear on Railway.** Check Railway API logs for `responder.tracing enabled=True`. If `enabled=False`, set `LANGSMITH_TRACING=true` in Railway dashboard. Send a plain message to the bot and confirm the `rag_pipeline` run appears in LangSmith with all child spans (embed_query, vector_retrieve, ChatOpenAI).
 
 ---
 
@@ -412,7 +414,7 @@ query rewriting · frontend · user auth · Slack · local embedding model · Ti
 | Nomic API embeddings | v1 | Free, no RAM overhead |
 | Tier 3 sources (DeepSeek, Qwen, Kimi) | v1.5 | Strategic but needs ingestion testing |
 | Tier 4 newsletters | v1.5 | Add after base pipeline is proven |
-| Eval harness (20 questions) | v1.5 | Add week 3 — portfolio differentiator |
+| Eval harness (20 questions) | ✅ v1.5 done | RAGAS 4-metric harness built; run `python scripts/run_evals.py` |
 | Hybrid BM25 + vector search | v1.5 | Measure vector baseline first |
 | Cross-encoder reranker | v1.5 | Adds 100–300ms + API cost; trigger: retrieval quality feels poor after 2+ weeks |
 | Query rewriting | v1.5 | Natural LangGraph candidate once baseline is proven |
@@ -476,10 +478,13 @@ briefcast/
 │   ├── seed_sources.py         ← seed source registry into Postgres
 │   ├── dry_run_ingestion.py    ← smoke-test registry and fetcher without writing to DB
 │   ├── run_ingestion_once.py   ← one-shot ingestion against live DB
+│   ├── run_evals.py            ← CLI entry point for RAGAS eval harness; --limit / --ids flags
 │   └── cost_report.py          ← manual weekly cost aggregation from logs
-├── evals/                      ← scaffold exists; flesh out at v1.5
-│   ├── questions.json          ← 20 Q&A pairs with expected sources + citation check
-│   └── eval_runner.py
+├── evals/                      ← RAGAS eval harness (v1.5 complete)
+│   ├── __init__.py             ← package marker
+│   ├── questions.json          ← 20 Q&A pairs with ground truths + expected sources (updated May 2026)
+│   ├── eval_runner.py          ← RAGAS 4-metric runner; Haiku judge; saves JSON reports
+│   └── reports/                ← generated eval reports (gitignored)
 ├── decisions/
 │   ├── 001-pgvector-over-pinecone.md
 │   ├── 002-model-selection-cost-quality.md

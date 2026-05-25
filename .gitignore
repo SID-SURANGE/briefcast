@@ -222,3 +222,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Eval reports (generated output — not source code)
+evals/reports/*.json
