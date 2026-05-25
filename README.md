@@ -1,4 +1,12 @@
+<p align="center">
+  <img src="docs/images/Bot_logo.png" alt="BrfCastBot logo" width="100">
+</p>
+
 # 📡 Briefcast
+
+<p align="center">
+  <img src="docs/images/repo_header.png" alt="Briefcast — personal AI intelligence briefing agent" width="100%">
+</p>
 
 > **Your personal AI intelligence briefing agent.**
 > Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to Telegram. Answers your follow-up questions.
@@ -30,7 +38,7 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 
 ## 📱 Sample briefing
 
-> Real output delivered to Telegram at 09:00 IST
+> Real output delivered to Telegram at 09:00 IST by **@BrfCastBot**
 
 ![Sample Briefcast briefing in Telegram](docs/images/Sample_brief.png)
 
@@ -174,13 +182,21 @@ briefcast/
 │   ├── seed_sources.py        # seed source registry into Postgres
 │   ├── dry_run_ingestion.py   # smoke-test registry and fetcher without writing to DB
 │   ├── run_ingestion_once.py  # one-shot ingestion against live DB
+│   ├── run_evals.py           # CLI entry for RAGAS eval harness (--limit / --ids flags)
 │   └── cost_report.py         # weekly LLM spend aggregated from logs
 ├── docs/
 │   ├── POLICY.md              # public ingestion + storage policy
 │   ├── env-setup.md           # local environment setup guide
-│   └── railway-deployment.md  # Railway deployment walkthrough
+│   ├── railway-deployment.md  # Railway deployment walkthrough
+│   ├── eval-harness.md        # RAGAS eval harness — metrics, run commands, score guide
+│   ├── langsmith-tracing.md   # LangSmith tracing — setup, span architecture, best practices
+│   └── architecture.md        # full pipeline diagram (Mermaid)
 ├── decisions/               # ADRs — every architectural decision documented
-├── evals/                   # RAGAS eval harness — 4-metric, 20 Q&A pairs (v1.5 complete)
+├── evals/                   # RAGAS eval harness (v1.5 complete)
+│   ├── eval_runner.py         # 4-metric runner; Haiku as judge; saves JSON reports
+│   ├── questions.json         # 20 grounded Q&A pairs with ground truths (May 2026)
+│   └── reports/               # generated eval reports (gitignored)
+├── CHANGELOG.md             # keep-a-changelog format; v1.0 and v1.5 entries
 ├── alembic/                 # DB migrations (pgvector extension + full schema)
 └── tests/                   # 32 tests — dedup, ranker, retriever
 ```
@@ -355,7 +371,7 @@ A cross-cutting design FAQ covering chunking, model selection, ranking, and retr
 | [`009`](decisions/009-nomic-api-over-local-embedding.md) | Nomic API over local embeddings — no RAM overhead on Railway Hobby, same model quality |
 | [`010`](decisions/010-prompt-caching-rag-system-prompt.md) | Prompt caching on RAG system prompt — 90% cost reduction on static token bucket at 2+ queries/window |
 | [`011`](decisions/011-single-path-query-ux.md) | Single-path query UX — no /ask or /chat commands; plain message → corpus first, web fallback |
-| [`012`](decisions/012-langsmith-pipeline-tracing.md) | Full LangSmith pipeline tracing via @traceable — end-to-end RAG visibility without LangChain overhead |
+| [`012`](decisions/012-full-pipeline-langsmith-tracing.md) | Full LangSmith pipeline tracing via @traceable — end-to-end RAG visibility without LangChain overhead |
 | [`FAQ`](decisions/design-faq.md) | Deep-dive: chunking, dedup thresholds, ranking weights, retrieval k, model rationale |
 
 ---
