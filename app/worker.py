@@ -209,6 +209,13 @@ async def run_briefing() -> None:
         )
         if not articles:
             log.warning("worker.briefing_no_articles")
+            await send_briefing(
+                "📭 <b>No new articles today</b>\n\n"
+                "Nothing fresh from your sources in the last 36 hours — "
+                "the pipeline is healthy, sources just had a quiet cycle.\n\n"
+                "Next ingestion runs every 6 hours. You can still ask questions — the 14-day corpus is available.",
+                [],
+            )
             return
 
         article_dicts = [
