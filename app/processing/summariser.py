@@ -23,13 +23,29 @@ _SYSTEM_PROMPT = (
 )
 
 
+_EMPTY_CONTENT_THRESHOLD = 80  # chars — below this, content is effectively title-only
+
+
 async def summarise(title: str, abstract: str, source_name: str) -> str:
     """
     Summarise an article for Mode A storage.
     For Mode B (arXiv), the abstract is stored directly — do not call this function.
     Returns a 3-5 sentence summary string.
+
+    If abstract is empty or title-only (< threshold chars), skips the LLM call and
+    returns a minimal title-derived summary to avoid Gemini generating meta-complaints.
     """
-    user_prompt = f"Title: {title}\n\nContent: {abstract}"
+    content = abstract.strip() if abstract else ""
+    if len(content) < _EMPTY_CONTENT_THRESHOLD:
+        log.warning(
+            "summariser.skipped_thin_content",
+            source=source_name,
+            title=title[:80],
+            content_len=len(content),
+        )
+        return f"{title}. (Full article content was not available at ingestion time.)"
+
+    user_prompt = f"Title: {title}\n\nContent: {content}"
 
     payload: dict[str, Any] = {
         "model": _MODEL,
