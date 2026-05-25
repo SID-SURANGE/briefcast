@@ -1,7 +1,7 @@
-<p align="center">
-  <img src="docs/images/Bot_logo.png" alt="BrfCastBot logo" width="60" style="vertical-align:middle; margin-right:12px">
-  <span style="font-size:2.5em; font-weight:700; vertical-align:middle;">📡 Briefcast</span>
-</p>
+<h1 align="center">
+  <img src="docs/images/Bot_logo.png" alt="BrfCastBot logo" width="50" valign="middle">
+  &nbsp; Briefcast
+</h1>
 
 <p align="center">
   <img src="docs/images/repo_header.png" alt="Briefcast — personal AI intelligence briefing agent" width="100%">
