@@ -21,24 +21,25 @@ _SYSTEM_PROMPT = (
     "You write a daily AI briefing for Telegram using HTML formatting only. "
     "No markdown asterisks, no raw URLs, no bracket-style links, no typed separator lines.\n\n"
 
-    "HEADER (output literally, substituting today's date):\n"
-    "📅 <b>BRIEFCAST | {DATE}</b>\n\n"
+    "HEADER (output literally, substituting DATE and COUNT from the user prompt):\n"
+    "📅 <b>BRIEFCAST | {DATE}</b>  ·  <code>{COUNT} articles</code>\n\n"
 
     "BODY — group articles by company/source. For each group:\n"
-    "  1. Source header line: <source_emoji> <b>Source Name</b>\n"
+    "  1. Source header line: <source_emoji> <b><u>Source Name</u></b>\n"
     "     Emoji per source: Google AI → 🔵  Google Research → 🔵  Google Cloud AI → 🔵  "
     "Google DeepMind → 🔵  OpenAI → ⚫  Anthropic → 🟠  Meta AI → 🔶  "
     "Hugging Face → 🟡  arXiv → 🟥  Microsoft → 🟦  NVIDIA → 🟩  other → 🔹\n"
     "  2. Each article — strictly in this order, each element on its own line:\n"
     "       🔷 <b>Full Project or Paper Title</b>\n"
-    "       [subtitle or descriptor here as plain text if needed — new line, never on the same line as the bold title]\n"
-    "       • <i>What it is</i> — one concise sentence summarising the technology.\n"
-    "       • <i>Why it matters</i> — one sentence on practical impact or implication for AI practitioners.\n"
+    "       • <i>What it is</i> — one concise sentence summarising the technology. "
+    "Wrap model names, version strings, and key metrics in <code>tags</code> "
+    "(e.g. <code>Gemini 2.5 Flash</code>, <code>94.7%</code>).\n"
+    "       <blockquote>💡 Why it matters — one sentence on practical impact or implication for AI practitioners.</blockquote>\n"
     "       🔗 <a href=\"URL\">Read Paper</a>  (use 'Read Paper' for arXiv, 'Read Post' for blogs)\n"
     "  3. Separate each source group with TWO blank lines. No dashes, no divider characters whatsoever.\n\n"
 
     "FOOTER (output literally):\n"
-    "<i>Briefcast · daily at 09:00 IST</i>\n\n"
+    "<i>Briefcast · next briefing tomorrow at 09:00 IST</i>\n\n"
 
     "Rules: AI and ML content only. No preamble. No sign-off. No 'Here is your briefing'. "
     "Never run the bold title and any subtitle on the same line."
@@ -106,7 +107,7 @@ def _select(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _build_user_prompt(articles: list[dict[str, Any]]) -> str:
     today = date.today().strftime("%A, %B %d, %Y")
-    lines = [f"DATE: {today}\n\nCompose the briefing from these {len(articles)} articles:\n"]
+    lines = [f"DATE: {today}\nCOUNT: {len(articles)}\n\nCompose the briefing from these {len(articles)} articles:\n"]
     for i, a in enumerate(articles, 1):
         lines.append(
             f"{i}. [{a['source_name']}] {a['title']}\n   {a.get('summary', '')}\n   URL: {a['url']}\n"
