@@ -1,14 +1,15 @@
-<h1 align="center">
-  <img src="docs/images/Bot_logo.png" alt="BrfCastBot logo" width="50" valign="middle">
-  &nbsp; Briefcast
-</h1>
+<p align="center">
+  <img src="docs/images/Bot_logo.png" alt="BrfCastBot logo" width="80">
+</p>
+
+<h1 align="center">📡 Briefcast</h1>
+
+<p align="center"><b>Your personal AI intelligence briefing agent.</b><br>
+Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to Telegram. Answers your follow-up questions.</p>
 
 <p align="center">
   <img src="docs/images/repo_header.png" alt="Briefcast — personal AI intelligence briefing agent" width="100%">
 </p>
-
-> **Your personal AI intelligence briefing agent.**
-> Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to Telegram. Answers your follow-up questions.
 
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
