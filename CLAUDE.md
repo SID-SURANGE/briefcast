@@ -62,6 +62,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Alembic env | `alembic/env.py` | ✅ URL scheme normalised; migrations run clean on Railway |
 | Classifier | `app/ingestion/classifier.py` | ✅ LLM-based relevance filter (Gemini Flash); YES/NO; narrowed to model releases, research, system design, observability tools |
 | Tests | `tests/test_dedup.py`, `test_ranker.py`, `test_retriever.py` | ✅ 32/32 passing |
+| Eval harness | `evals/eval_runner.py`, `scripts/run_evals.py` | ✅ RAGAS 4-metric harness (faithfulness, answer_relevancy, context_precision, context_recall); 20 Q&A pairs in `evals/questions.json`; Haiku as judge LLM; reports saved to `evals/reports/` |
 | Railway deployment | API + Worker services | ✅ both deployed; API public domain active |
 
 ### Known verified feed URLs
@@ -84,6 +85,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Confirm scheduled briefing fires | Daily at 13:00 IST via Railway worker — check Railway worker logs |
 | Add Tavily key to Railway | Set `TAVILY_API_KEY` in Railway dashboard — enables web search fallback for out-of-corpus queries |
 | Monitor first week | Check Railway logs for circuit breaker trips or 402s; run `scripts/cost_report.py` |
+| Run eval harness | `python scripts/run_evals.py --limit 5` for a smoke test; `python scripts/run_evals.py` for full 20-question run against live Railway DB |
 | Forum Topics (optional, v1.5) | Create Telegram Supergroup → enable Topics → get thread IDs → set `TELEGRAM_BRIEFING_THREAD_ID` + `TELEGRAM_ALERT_THREAD_ID` |
 
 ### Current BrfCastBot setup — what to do now vs later
@@ -412,7 +414,7 @@ query rewriting · frontend · user auth · Slack · local embedding model · Ti
 | Nomic API embeddings | v1 | Free, no RAM overhead |
 | Tier 3 sources (DeepSeek, Qwen, Kimi) | v1.5 | Strategic but needs ingestion testing |
 | Tier 4 newsletters | v1.5 | Add after base pipeline is proven |
-| Eval harness (20 questions) | v1.5 | Add week 3 — portfolio differentiator |
+| Eval harness (20 questions) | ✅ v1.5 done | RAGAS 4-metric harness built; run `python scripts/run_evals.py` |
 | Hybrid BM25 + vector search | v1.5 | Measure vector baseline first |
 | Cross-encoder reranker | v1.5 | Adds 100–300ms + API cost; trigger: retrieval quality feels poor after 2+ weeks |
 | Query rewriting | v1.5 | Natural LangGraph candidate once baseline is proven |
@@ -476,10 +478,13 @@ briefcast/
 │   ├── seed_sources.py         ← seed source registry into Postgres
 │   ├── dry_run_ingestion.py    ← smoke-test registry and fetcher without writing to DB
 │   ├── run_ingestion_once.py   ← one-shot ingestion against live DB
+│   ├── run_evals.py            ← CLI entry point for RAGAS eval harness; --limit / --ids flags
 │   └── cost_report.py          ← manual weekly cost aggregation from logs
-├── evals/                      ← scaffold exists; flesh out at v1.5
-│   ├── questions.json          ← 20 Q&A pairs with expected sources + citation check
-│   └── eval_runner.py
+├── evals/                      ← RAGAS eval harness (v1.5 complete)
+│   ├── __init__.py             ← package marker
+│   ├── questions.json          ← 20 Q&A pairs with ground truths + expected sources (updated May 2026)
+│   ├── eval_runner.py          ← RAGAS 4-metric runner; Haiku judge; saves JSON reports
+│   └── reports/                ← generated eval reports (gitignored)
 ├── decisions/
 │   ├── 001-pgvector-over-pinecone.md
 │   ├── 002-model-selection-cost-quality.md
