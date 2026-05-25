@@ -12,9 +12,7 @@ from app.config import settings
 log = structlog.get_logger()
 
 _COMMANDS = [
-    BotCommand("ask", "Search corpus only (no web fallback)"),
-    BotCommand("chat", "Direct AI chat — no search"),
-    BotCommand("help", "Show available commands"),
+    BotCommand("help", "Show how to use this bot"),
 ]
 
 _TELEGRAM_MAX_CHARS = 4096
@@ -111,60 +109,32 @@ async def _cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     text = (
         "<b>Briefcast — your personal AI intelligence bot</b>\n\n"
-        "Just <b>type any question</b> — no command needed.\n\n"
-        "🔍 <b>Auto-routing:</b>\n"
-        "  • Found in corpus → answer with citations from your ingested articles\n"
-        "  • Not in corpus → live web search fallback (⚡ marked)\n\n"
-        "<b>Explicit commands:</b>\n"
-        "/ask <i>question</i> — force corpus-only search (no web fallback)\n"
-        "/chat <i>message</i> — direct AI chat, no search at all\n"
-        "/help — show this message"
+        "Just <b>type any question</b> — that's it.\n\n"
+        "🔍 <b>How it works:</b>\n"
+        "  • Your question is searched against the ingested AI news corpus\n"
+        "  • If a match is found → grounded answer with citations\n"
+        "  • If nothing matches → live web search kicks in automatically (⚡)\n\n"
+        "No commands needed. Just ask."
     )
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
-async def _cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /ask <query> — corpus-only RAG (no web search fallback)."""
-    if update.message is None:
-        return
-
-    query = " ".join(context.args or []).strip()
-    if not query:
-        await update.message.reply_text("Usage: /ask <i>your question</i>", parse_mode=ParseMode.HTML)
-        return
-
-    await _run_rag(update, query, corpus_only=True)
-
-
-async def _cmd_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /chat <message> — direct LLM, no retrieval."""
-    if update.message is None:
-        return
-
-    query = " ".join(context.args or []).strip()
-    if not query:
-        await update.message.reply_text("Usage: /chat <i>your message</i>", parse_mode=ParseMode.HTML)
-        return
-
-    await _run_chat(update, query)
-
-
 async def _on_plain_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Plain messages (no command) → RAG with web search fallback enabled."""
+    """All messages → corpus first, Tavily web search fallback on miss."""
     if update.message is None or not update.message.text:
         return
-    await _run_rag(update, update.message.text.strip(), corpus_only=False)
+    await _run_rag(update, update.message.text.strip())
 
 
-async def _run_rag(update: Update, query: str, corpus_only: bool = False) -> None:
+async def _run_rag(update: Update, query: str) -> None:
     from app.rag.responder import respond  # noqa: PLC0415
 
-    log.info("telegram.rag_query", length=len(query), corpus_only=corpus_only)
+    log.info("telegram.rag_query", length=len(query))
     try:
-        answer = await respond(query, corpus_only=corpus_only)
+        answer = await respond(query)
     except Exception as exc:
         log.error("telegram.rag_error", error=str(exc))
-        answer = "Sorry, something went wrong with the corpus query."
+        answer = "Sorry, something went wrong. Please try again."
 
     await update.message.reply_text(answer, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
@@ -223,25 +193,10 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     log.info("telegram.drill_sent", company=company_key, articles=len(articles))
 
 
-async def _run_chat(update: Update, query: str) -> None:
-    from app.rag.chat_responder import chat  # noqa: PLC0415
-
-    log.info("telegram.chat_query", length=len(query))
-    try:
-        answer = await chat(query)
-    except Exception as exc:
-        log.error("telegram.chat_error", error=str(exc))
-        answer = "Sorry, something went wrong with the chat request."
-
-    await update.message.reply_text(answer, parse_mode=ParseMode.HTML)
-
-
 def build_application() -> Application:
     """Build and return the PTB Application with all handlers registered."""
     app = Application.builder().token(settings.telegram_bot_token).build()
     app.add_handler(CommandHandler("help", _cmd_help))
-    app.add_handler(CommandHandler("ask", _cmd_ask))
-    app.add_handler(CommandHandler("chat", _cmd_chat))
     app.add_handler(CallbackQueryHandler(_on_drill_callback, pattern=r"^drill:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_plain_message))
     return app

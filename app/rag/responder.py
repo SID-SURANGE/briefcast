@@ -35,22 +35,35 @@ _COST_PER_CACHE_WRITE_TOKEN = 3.75 / 1_000_000  # 25% more expensive, paid once
 # Below this, results are semantically unrelated — treat as corpus miss.
 _MIN_SIMILARITY = 0.35
 
-_SYSTEM_PROMPT = (
+_SYSTEM_PROMPT_CORPUS = (
     "You are a precise AI research assistant. "
     "Rules:\n"
     "- Cite every factual claim inline as <a href=\"URL\">Source Name</a>.\n"
     "- NEVER answer from your training knowledge — only from the provided context.\n"
-    "- If context is empty or off-topic, say exactly: "
+    "- If context is empty, say exactly: "
     "\"I don't have recent data on this topic. Try rephrasing or check back after the next ingestion.\"\n"
     "- Answer in 3–6 sentences unless the question genuinely requires more.\n"
     "- Format output as Telegram HTML: <b>key terms</b>, inline citation links as above.\n"
     "- Do not mention that you are using a corpus or context — answer naturally."
 )
 
+_SYSTEM_PROMPT_WEB = (
+    "You are a helpful research assistant answering questions from live web search results. "
+    "Rules:\n"
+    "- Cite every factual claim inline as <a href=\"URL\">Source Name</a>.\n"
+    "- Answer only from the provided web search context — do not add training knowledge.\n"
+    "- If context is empty, say: \"I couldn't find recent information on that topic.\"\n"
+    "- Answer in 3–6 sentences unless the question genuinely requires more.\n"
+    "- Format output as Telegram HTML: <b>key terms</b>, inline citation links as above.\n"
+    "- Answer any topic — you are not restricted to AI subjects."
+)
+
 # System message with cache_control so the static system prompt is cached across queries.
 # Anthropic's prompt cache has a 5-min TTL — any query within that window gets a cache hit.
+# Only the corpus prompt is cacheable (it's reused across many queries).
+# Web search prompt is built fresh per-request (less frequent, not worth caching).
 _CACHED_SYSTEM_MESSAGE = SystemMessage(content=[
-    {"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+    {"type": "text", "text": _SYSTEM_PROMPT_CORPUS, "cache_control": {"type": "ephemeral"}}
 ])
 
 # anthropic-beta header opts this model into prompt caching via OpenRouter.
@@ -83,18 +96,14 @@ def _has_relevant_results(articles: list[dict]) -> bool:
     return bool(articles) and articles[0]["similarity"] >= _MIN_SIMILARITY
 
 
-async def respond(query: str, corpus_only: bool = False) -> str:
+async def respond(query: str) -> str:
     """
     Embed query → retrieve from pgvector → generate grounded answer via Claude Sonnet.
 
     Routing:
       1. Corpus hit (similarity ≥ _MIN_SIMILARITY) → RAG answer with citations.
-      2. Corpus miss + corpus_only=False + TAVILY_API_KEY set → web search fallback.
-      3. Corpus miss + corpus_only=True → canned "not in corpus" message (no LLM, zero cost).
-      4. Corpus miss + no Tavily key → canned "no data" message (no LLM, zero cost).
-
-    corpus_only=True is used by the /ask command so users can explicitly restrict to
-    the ingested corpus without a web fallback.
+      2. Corpus miss + TAVILY_API_KEY set → live web search → LLM answer (⚡ marked).
+      3. Corpus miss + no Tavily key → canned "no data" message (no LLM, zero cost).
 
     Prompt caching: static system prompt marked cache_control=ephemeral (5-min TTL).
     LangSmith tracing: automatic when LANGSMITH_TRACING=true.
@@ -119,15 +128,7 @@ async def respond(query: str, corpus_only: bool = False) -> str:
             "responder.corpus_miss",
             best_similarity=best_sim,
             articles_returned=len(articles),
-            corpus_only=corpus_only,
         )
-
-        if corpus_only:
-            return (
-                "I don't have recent articles on that topic in my 14-day AI corpus.\n\n"
-                "Try asking without <b>/ask</b> (plain message) to enable live web search, "
-                "or rephrase — e.g. include a company or model name."
-            )
 
         # Try web search fallback
         web_results = await search_web(query)
@@ -135,17 +136,24 @@ async def respond(query: str, corpus_only: bool = False) -> str:
             context_block = build_web_context(web_results)
             used_web_search = True
         else:
-            # No corpus, no Tavily key → hard gate, no LLM call
+            # No corpus hit, no Tavily key → hard gate, no LLM call
             return (
-                "I don't have recent articles on that topic in my 14-day AI corpus.\n\n"
-                "Try <b>/chat</b> for a general answer, or ask again after tomorrow's ingestion. "
-                "You can also rephrase — e.g. include a company or model name."
+                "I don't have recent articles on that topic in my 14-day AI corpus, "
+                "and web search is not enabled.\n\n"
+                "Try rephrasing — e.g. include a company or model name."
             )
     else:
         context_block = _build_corpus_context(articles)
 
+    # Use web-search system prompt when Tavily context is in play — it is topic-agnostic
+    # and does not restrict answers to AI subjects, avoiding false "off-topic" rejections.
+    system_message = (
+        SystemMessage(content=_SYSTEM_PROMPT_WEB)
+        if used_web_search
+        else _CACHED_SYSTEM_MESSAGE
+    )
     messages = [
-        _CACHED_SYSTEM_MESSAGE,
+        system_message,
         HumanMessage(content=f"Context:\n{context_block}\n\nQuestion: {query}"),
     ]
 
