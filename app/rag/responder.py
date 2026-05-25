@@ -4,6 +4,7 @@ import time
 import structlog
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langsmith import traceable
 
 from app.config import settings
 from app.db import SessionLocal
@@ -14,16 +15,20 @@ from app.rag.web_searcher import build_web_context, search_web
 
 log = structlog.get_logger(__name__)
 
-# LangChain reads tracing config from os.environ directly.
-# pydantic-settings populates our Settings object but does not write to os.environ,
-# so we bridge the two here at import time.
-# Only enable tracing when a key is present — prevents 403 noise when unset.
+# LangChain + LangSmith read tracing config from os.environ.
+# pydantic-settings populates Settings but does not write to os.environ,
+# so we force-set here at import time. We override (not setdefault) so that
+# our config always wins — important on Railway where env vars are already present
+# but may point to the wrong endpoint or project.
 _tracing_enabled = bool(settings.langsmith_api_key and settings.langsmith_tracing == "true")
-os.environ.setdefault("LANGSMITH_TRACING", "true" if _tracing_enabled else "false")
-os.environ.setdefault("LANGSMITH_API_KEY", settings.langsmith_api_key)
-os.environ.setdefault("LANGSMITH_PROJECT", settings.langsmith_project)
-os.environ.setdefault("LANGSMITH_ENDPOINT", settings.langsmith_endpoint)
-log.info("responder.tracing", enabled=_tracing_enabled, project=settings.langsmith_project)
+os.environ["LANGSMITH_TRACING"] = "true" if _tracing_enabled else "false"
+os.environ["LANGCHAIN_TRACING_V2"] = "true" if _tracing_enabled else "false"  # legacy compat
+os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key
+os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+os.environ["LANGCHAIN_ENDPOINT"] = settings.langsmith_endpoint  # legacy compat
+log.info("responder.tracing", enabled=_tracing_enabled, project=settings.langsmith_project,
+         endpoint=settings.langsmith_endpoint)
 
 _MODEL = "anthropic/claude-sonnet-4-6"
 _COST_PER_INPUT_TOKEN = 3.00 / 1_000_000
@@ -96,6 +101,27 @@ def _has_relevant_results(articles: list[dict]) -> bool:
     return bool(articles) and articles[0]["similarity"] >= _MIN_SIMILARITY
 
 
+# ---------------------------------------------------------------------------
+# Traced wrappers — each becomes a named child span inside the rag_pipeline trace.
+# Using thin wrappers keeps the tracing concern out of the underlying modules.
+# ---------------------------------------------------------------------------
+
+@traceable(name="embed_query", run_type="embedding")
+async def _traced_embed(query: str) -> list[float]:
+    return await embed(query, task_type="search_query")
+
+
+@traceable(name="vector_retrieve", run_type="retriever")
+def _traced_retrieve(query_embedding: list[float], db: object) -> list[dict]:
+    return retrieve(query_embedding, db)
+
+
+@traceable(name="tavily_web_search", run_type="tool")
+async def _traced_web_search(query: str) -> list[dict]:
+    return await search_web(query)
+
+
+@traceable(name="rag_pipeline", run_type="chain")
 async def respond(query: str) -> str:
     """
     Embed query → retrieve from pgvector → generate grounded answer via Claude Sonnet.
@@ -106,16 +132,17 @@ async def respond(query: str) -> str:
       3. Corpus miss + no Tavily key → canned "no data" message (no LLM, zero cost).
 
     Prompt caching: static system prompt marked cache_control=ephemeral (5-min TTL).
-    LangSmith tracing: automatic when LANGSMITH_TRACING=true.
+    LangSmith tracing: full pipeline traced — embed, retrieve, web search, generate.
 
     Returns Telegram-HTML formatted text with inline citations.
     """
-    # Embed + retrieve — explicit steps, logged via structlog
-    query_embedding = await embed(query, task_type="search_query")
+    # Step 1: embed the query (traced as child span via @traceable in embedder)
+    query_embedding = await _traced_embed(query)
 
+    # Step 2: retrieve from pgvector (traced as child span)
     db = SessionLocal()
     try:
-        articles = retrieve(query_embedding, db)
+        articles = _traced_retrieve(query_embedding, db)
     finally:
         db.close()
 
@@ -130,8 +157,8 @@ async def respond(query: str) -> str:
             articles_returned=len(articles),
         )
 
-        # Try web search fallback
-        web_results = await search_web(query)
+        # Step 3a: web search fallback (traced as child span)
+        web_results = await _traced_web_search(query)
         if web_results:
             context_block = build_web_context(web_results)
             used_web_search = True
@@ -143,10 +170,11 @@ async def respond(query: str) -> str:
                 "Try rephrasing — e.g. include a company or model name."
             )
     else:
+        # Step 3b: format corpus context
         context_block = _build_corpus_context(articles)
 
-    # Use web-search system prompt when Tavily context is in play — it is topic-agnostic
-    # and does not restrict answers to AI subjects, avoiding false "off-topic" rejections.
+    # Step 4: generate — use topic-agnostic prompt for web context to avoid
+    # false "off-topic" rejections when Tavily returns non-AI results.
     system_message = (
         SystemMessage(content=_SYSTEM_PROMPT_WEB)
         if used_web_search
@@ -157,7 +185,7 @@ async def respond(query: str) -> str:
         HumanMessage(content=f"Context:\n{context_block}\n\nQuestion: {query}"),
     ]
 
-    # _llm.ainvoke is traced in LangSmith automatically when tracing is enabled
+    # _llm.ainvoke is auto-traced by LangChain as a child span inside rag_pipeline
     t0 = time.monotonic()
     ai_message = await _llm.ainvoke(messages)
     latency_ms = (time.monotonic() - t0) * 1000
