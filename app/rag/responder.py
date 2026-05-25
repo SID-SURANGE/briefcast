@@ -1,4 +1,5 @@
 import os
+import re
 import time
 
 import structlog
@@ -41,27 +42,37 @@ _COST_PER_CACHE_WRITE_TOKEN = 3.75 / 1_000_000  # 25% more expensive, paid once
 # corpus queries; lower if genuine on-topic questions are missing the corpus.
 _MIN_SIMILARITY: float = settings.rag_min_similarity
 
+_FORMAT_RULES = (
+    "OUTPUT FORMAT — STRICT:\n"
+    "- Use Telegram HTML only. Never use Markdown.\n"
+    "- Bold: <b>text</b>  NOT **text**\n"
+    "- Italic: <i>text</i>  NOT _text_\n"
+    "- Links: <a href=\"URL\">Label</a>  NOT [Label](URL)\n"
+    "- No bullet dashes preceded by * or - unless inside a <code> block.\n"
+    "- Do not wrap the entire response in any tag."
+)
+
 _SYSTEM_PROMPT_CORPUS = (
-    "You are a precise AI research assistant. "
+    "You are a precise AI research assistant.\n"
     "Rules:\n"
     "- Cite every factual claim inline as <a href=\"URL\">Source Name</a>.\n"
     "- NEVER answer from your training knowledge — only from the provided context.\n"
     "- If context is empty, say exactly: "
     "\"I don't have recent data on this topic. Try rephrasing or check back after the next ingestion.\"\n"
     "- Answer in 3–6 sentences unless the question genuinely requires more.\n"
-    "- Format output as Telegram HTML: <b>key terms</b>, inline citation links as above.\n"
-    "- Do not mention that you are using a corpus or context — answer naturally."
+    "- Do not mention that you are using a corpus or context — answer naturally.\n\n"
+    + _FORMAT_RULES
 )
 
 _SYSTEM_PROMPT_WEB = (
-    "You are a helpful research assistant answering questions from live web search results. "
+    "You are a helpful research assistant answering questions from live web search results.\n"
     "Rules:\n"
     "- Cite every factual claim inline as <a href=\"URL\">Source Name</a>.\n"
     "- Answer only from the provided web search context — do not add training knowledge.\n"
     "- If context is empty, say: \"I couldn't find recent information on that topic.\"\n"
     "- Answer in 3–6 sentences unless the question genuinely requires more.\n"
-    "- Format output as Telegram HTML: <b>key terms</b>, inline citation links as above.\n"
-    "- Answer any topic — you are not restricted to AI subjects."
+    "- Answer any topic — you are not restricted to AI subjects.\n\n"
+    + _FORMAT_RULES
 )
 
 # System message with cache_control so the static system prompt is cached across queries.
@@ -84,6 +95,21 @@ _llm = ChatOpenAI(
         "anthropic-beta": "prompt-caching-2024-07-31",
     },
 )
+
+
+def _sanitise_to_html(text: str) -> str:
+    """
+    Convert any residual Markdown formatting to Telegram HTML.
+    LLMs occasionally ignore format instructions — this is the safety net.
+    """
+    # **bold** → <b>bold</b>
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    # *italic* or _italic_ → <i>italic</i>
+    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
+    text = re.sub(r"_(.+?)_", r"<i>\1</i>", text)
+    # [label](url) → <a href="url">label</a>
+    text = re.sub(r"\[(.+?)\]\((https?://[^\)]+)\)", r'<a href="\2">\1</a>', text)
+    return text
 
 
 def _build_corpus_context(articles: list[dict]) -> str:
@@ -195,7 +221,7 @@ async def respond(query: str) -> str:
         "\n\n<i>⚡ Answered from live web search — not in my 14-day corpus.</i>"
         if used_web_search else ""
     )
-    answer: str = ai_message.content + web_disclaimer
+    answer: str = _sanitise_to_html(ai_message.content) + web_disclaimer
 
     # Cost logging — cache reads are 90% cheaper than full input tokens
     usage = getattr(ai_message, "usage_metadata", None)
