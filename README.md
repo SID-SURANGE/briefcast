@@ -44,7 +44,7 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 | 🔁 **2-layer deduplication** | SHA-256 URL hash (O(1)) + cosine similarity to catch near-duplicates across sources. |
 | ✍️ **AI summarisation** | Gemini 2.5 Flash generates a tight 3–5 sentence summary per article. |
 | 📰 **Daily briefing** | Claude Haiku composes a top 10 briefing with mandatory inline citations. Delivered at 09:00 IST. |
-| 💬 **RAG query-back** | Ask anything in Telegram. Claude Sonnet answers from your 14-day corpus with citations. |
+| 💬 **RAG query-back** | Ask anything in Telegram. Claude Sonnet answers from your 14-day corpus with citations. Tavily web search fallback on corpus miss. |
 | ⚡ **Circuit breaker** | 3 consecutive feed failures → source marked degraded → Telegram alert fires immediately. |
 | 💰 **Cost-conscious by design** | ~$2–3/month in LLM spend. Runs on a $5/month Railway instance. Total: ~$8/month. |
 
@@ -163,7 +163,7 @@ briefcast/
 │   ├── config.py            # pydantic-settings — all env vars, no secrets in code
 │   ├── db.py                # SQLAlchemy engine + session
 │   ├── models/              # Article, Source (pgvector, soft-delete)
-│   ├── ingestion/           # fetcher, dedup, circuit breaker
+│   ├── ingestion/           # fetcher, dedup, classifier, circuit breaker
 │   ├── processing/          # summariser (Gemini Flash), embedder (Nomic)
 │   ├── ranking/             # weighted ranker
 │   ├── briefing/            # composer (Claude Haiku)
@@ -180,7 +180,7 @@ briefcast/
 │   ├── env-setup.md           # local environment setup guide
 │   └── railway-deployment.md  # Railway deployment walkthrough
 ├── decisions/               # ADRs — every architectural decision documented
-├── evals/                   # RAG eval harness scaffold (v1.5)
+├── evals/                   # RAGAS eval harness — 4-metric, 20 Q&A pairs (v1.5 complete)
 ├── alembic/                 # DB migrations (pgvector extension + full schema)
 └── tests/                   # 32 tests — dedup, ranker, retriever
 ```
@@ -334,6 +334,15 @@ See the full interactive diagram → [`docs/architecture.md`](docs/architecture.
 Every key design choice is documented as an ADR in [`decisions/`](decisions/).
 A cross-cutting design FAQ covering chunking, model selection, ranking, and retrieval is at [`decisions/design-faq.md`](decisions/design-faq.md).
 
+### Operational guides
+
+| Guide | What it covers |
+|---|---|
+| [`docs/eval-harness.md`](docs/eval-harness.md) | RAGAS 4-metric eval harness — how to run, interpret scores, and when to re-evaluate |
+| [`docs/langsmith-tracing.md`](docs/langsmith-tracing.md) | LangSmith RAG tracing — setup, span architecture, prompt cache visibility, best practices |
+| [`docs/env-setup.md`](docs/env-setup.md) | Local environment setup |
+| [`docs/railway-deployment.md`](docs/railway-deployment.md) | Railway deployment walkthrough |
+
 | ADR | Decision |
 |---|---|
 | [`001`](decisions/001-pgvector-over-pinecone.md) | pgvector over Pinecone — single DB, SQL joins, no extra infrastructure at <1M vectors |
@@ -344,15 +353,18 @@ A cross-cutting design FAQ covering chunking, model selection, ranking, and retr
 | [`007`](decisions/007-openrouter-gateway.md) | OpenRouter as LLM gateway — one key, unified billing, model swaps without code changes |
 | [`008`](decisions/008-telegram-over-slack.md) | Telegram over Slack — free, no OAuth, unlimited history, right fit for a personal tool |
 | [`009`](decisions/009-nomic-api-over-local-embedding.md) | Nomic API over local embeddings — no RAM overhead on Railway Hobby, same model quality |
+| [`010`](decisions/010-prompt-caching-rag-system-prompt.md) | Prompt caching on RAG system prompt — 90% cost reduction on static token bucket at 2+ queries/window |
+| [`011`](decisions/011-single-path-query-ux.md) | Single-path query UX — no /ask or /chat commands; plain message → corpus first, web fallback |
+| [`012`](decisions/012-langsmith-pipeline-tracing.md) | Full LangSmith pipeline tracing via @traceable — end-to-end RAG visibility without LangChain overhead |
 | [`FAQ`](decisions/design-faq.md) | Deep-dive: chunking, dedup thresholds, ranking weights, retrieval k, model rationale |
 
 ---
 
 ## 🗺️ Roadmap
 
+- [x] RAG eval harness — RAGAS 4-metric harness, 20 grounded Q&A pairs, Haiku as judge
 - [ ] Tier 3 sources — DeepSeek, Qwen, Kimi, Mistral
 - [ ] Tier 4 newsletters — Import AI, Ahead of AI, The Gradient
-- [ ] RAG eval harness — 20 grounded Q&A pairs with source + citation checks
 - [ ] Hybrid BM25 + vector search — measure vector baseline first
 - [ ] GCP migration path — Cloud Run + Cloud SQL, same Docker images, no code changes
 
