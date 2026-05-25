@@ -36,11 +36,10 @@ _COST_PER_OUTPUT_TOKEN = 15.00 / 1_000_000
 _COST_PER_CACHE_READ_TOKEN = 0.30 / 1_000_000   # 90% cheaper than full input
 _COST_PER_CACHE_WRITE_TOKEN = 3.75 / 1_000_000  # 25% more expensive, paid once
 
-# Minimum cosine similarity to treat a retrieved article as relevant.
-# Below this, results are semantically unrelated — treat as corpus miss → Tavily fallback.
-# 0.35 was too permissive — borderline AI-adjacent articles were blocking Tavily from firing.
-# 0.50 requires genuine topical overlap; anything below routes to web search.
-_MIN_SIMILARITY = 0.50
+# Loaded from config (RAG_MIN_SIMILARITY env var, default 0.65).
+# Tune via Railway env var without code changes — raise if Tavily fires too often on valid
+# corpus queries; lower if genuine on-topic questions are missing the corpus.
+_MIN_SIMILARITY: float = settings.rag_min_similarity
 
 _SYSTEM_PROMPT_CORPUS = (
     "You are a precise AI research assistant. "

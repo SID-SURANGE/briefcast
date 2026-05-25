@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     openrouter_app_referer: str = "https://github.com/briefcast"
     dedup_threshold: float = 0.92
+    # Minimum cosine similarity to treat a retrieved article as relevant for RAG.
+    # Below this → corpus miss → Tavily web search fallback.
+    # Calibrated from live corpus: irrelevant tech results score 0.52–0.59; genuine hits 0.65+.
+    rag_min_similarity: float = 0.65
     # Web search fallback (Tavily — free tier: 1,000 searches/month)
     tavily_api_key: str = ""
     # Telegram Forum Topics — optional; if set, briefings/alerts post to specific threads.
