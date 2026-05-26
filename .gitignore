@@ -225,3 +225,8 @@ __marimo__/
 
 # Eval reports (generated output — not source code)
 evals/reports/*.json
+
+# cursor kit
+cursor-team-kit/
+.cursor/
+AGENTS.md

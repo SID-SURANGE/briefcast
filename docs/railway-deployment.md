@@ -1,6 +1,6 @@
-# Railway Deployment Guide
+# 🚂 Railway Deployment Guide
 
-Deploy briefcast to Railway as two services (API + Worker) backed by a Railway Postgres database.
+> Deploy Briefcast to Railway as two services (API + Worker) backed by a Railway Postgres database.
 
 ---
 

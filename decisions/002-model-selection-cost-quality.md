@@ -1,4 +1,4 @@
-# ADR 002: Model selection by task — cost and quality
+# ADR 002 · Model selection by task — cost and quality
 
 ## Status
 Accepted

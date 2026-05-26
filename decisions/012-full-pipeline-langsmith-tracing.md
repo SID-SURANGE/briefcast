@@ -1,4 +1,4 @@
-# ADR 012: Full RAG pipeline tracing via LangSmith @traceable
+# ADR 012 · Full RAG pipeline tracing via LangSmith @traceable
 
 ## Status
 Accepted — 2026-05-25

@@ -1,4 +1,4 @@
-# ADR 004: Citations mandatory in all outputs
+# ADR 004 · Citations mandatory in all outputs
 
 ## Status
 Accepted

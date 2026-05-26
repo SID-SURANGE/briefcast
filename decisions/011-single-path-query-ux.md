@@ -1,4 +1,4 @@
-# ADR 011: Single-path query UX — remove /ask and /chat commands
+# ADR 011 · Single-path query UX — remove /ask and /chat commands
 
 ## Status
 Accepted — 2026-05-25

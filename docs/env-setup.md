@@ -1,7 +1,7 @@
-# Environment Variables — Setup Guide
+# 🔑 Environment Variables — Setup Guide
 
-How to obtain every value in `.env.example`.
-Copy `.env.example` to `.env` and fill in each variable as you work through this guide.
+> How to obtain every value in `.env.example`.
+> Copy `.env.example` to `.env` and fill in each variable as you work through this guide.
 
 ```bash
 cp .env.example .env

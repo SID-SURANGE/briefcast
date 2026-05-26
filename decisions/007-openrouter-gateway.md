@@ -1,4 +1,4 @@
-# ADR 007: OpenRouter as sole LLM gateway
+# ADR 007 · OpenRouter as sole LLM gateway
 
 ## Status
 Accepted

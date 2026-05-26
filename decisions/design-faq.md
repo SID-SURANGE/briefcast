@@ -1,6 +1,6 @@
-# Briefcast — System Design FAQ
+# 🧠 Briefcast — System Design FAQ
 
-**Audience:** Claude Architect Certification prep · design review · portfolio defence
+> **Audience:** Claude Architect Certification prep · design review · portfolio defence
 **Last updated:** 2026-05-19
 
 ---
