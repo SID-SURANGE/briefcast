@@ -1,4 +1,4 @@
-# ADR 005: Google AI family as Tier 1 with ranking boost
+# ADR 005 · Google AI family as Tier 1 with ranking boost
 
 ## Status
 Accepted

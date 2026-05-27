@@ -1,4 +1,4 @@
-# ADR 009: Nomic API over local embedding model in v1
+# ADR 009 · Nomic API over local embedding model in v1
 
 ## Status
 Accepted

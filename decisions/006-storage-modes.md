@@ -1,4 +1,4 @@
-# ADR 006: Three storage modes — summary, abstract, processed-discard
+# ADR 006 · Three storage modes — summary, abstract, processed-discard
 
 ## Status
 Accepted

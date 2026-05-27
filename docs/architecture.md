@@ -1,7 +1,7 @@
-# Briefcast — Architecture Diagram
+# 🗺️ Briefcast — Architecture Diagram
 
-Paste the Mermaid code below into [mermaid.live](https://mermaid.live) to render and export as PNG/SVG.
-It also renders automatically in GitHub README and Notion.
+> Paste the Mermaid code below into [mermaid.live](https://mermaid.live) to render and export as PNG/SVG.
+> Renders automatically in GitHub README and Notion.
 
 ## Sample output
 

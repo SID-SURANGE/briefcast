@@ -1,4 +1,4 @@
-# ADR 001: pgvector over a dedicated vector database
+# ADR 001 · pgvector over a dedicated vector database
 
 ## Status
 Accepted

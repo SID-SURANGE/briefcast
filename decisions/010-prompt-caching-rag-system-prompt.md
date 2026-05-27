@@ -1,4 +1,4 @@
-# ADR 010: Prompt caching for RAG system prompt via Anthropic ephemeral cache
+# ADR 010 · Prompt caching for RAG system prompt via Anthropic ephemeral cache
 
 ## Status
 Accepted

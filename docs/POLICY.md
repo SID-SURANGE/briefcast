@@ -1,6 +1,6 @@
-# Ingestion and Storage Policy
+# 📜 Ingestion and Storage Policy
 
-briefcast ingests AI ecosystem updates for personal use via official RSS feeds and public APIs only.
+> Briefcast ingests AI ecosystem updates for personal use via official RSS feeds and public APIs only.
 
 ## What we ingest
 - Official RSS/Atom feeds from AI labs and research organisations

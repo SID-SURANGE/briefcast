@@ -1,4 +1,4 @@
-# ADR 003: RSS/API-only ingestion in v1
+# ADR 003 · RSS/API-only ingestion in v1
 
 ## Status
 Accepted

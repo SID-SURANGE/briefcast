@@ -1,6 +1,6 @@
-# Changelog
+# 📋 Changelog
 
-All notable changes to Briefcast are documented here.  
+> All notable changes to Briefcast are documented here.  
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
 Versions map to the project's v1 → v1.5 → v2 milestone structure.
 

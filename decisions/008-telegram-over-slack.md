@@ -1,4 +1,4 @@
-# ADR 008: Telegram over Slack for delivery
+# ADR 008 · Telegram over Slack for delivery
 
 ## Status
 Accepted
