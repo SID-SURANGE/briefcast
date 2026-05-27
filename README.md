@@ -96,7 +96,7 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 └─────────────────────────────────────────────────────────┘
 ```
 
-<video src="docs/process_flow.mp4" autoplay loop muted playsinline width="100%"></video>
+<video src="https://github.com/user-attachments/assets/4c163b81-144d-48e6-b487-ac9178530dac" autoplay loop muted playsinline width="100%"></video>
 
 > 🎬 Pipeline animation generated with [**Gemini Omni Flash**](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-omni/) — Google's multimodal video generation model (Google I/O 2026)
 
