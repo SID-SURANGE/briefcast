@@ -51,7 +51,7 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 | 🥇 **Tiered source ranking** | Google AI family always surfaces first. Tier 1 → Tier 2 → arXiv. |
 | 🔁 **2-layer deduplication** | SHA-256 URL hash (O(1)) + cosine similarity to catch near-duplicates across sources. |
 | ✍️ **AI summarisation** | Gemini 2.5 Flash generates a tight 3–5 sentence summary per article. |
-| 📰 **Daily briefing** | Claude Haiku composes a top 10 briefing with mandatory inline citations. Delivered at 09:00 IST. |
+| 📰 **Daily briefing** | Claude Haiku composes a top 6–8 briefing with mandatory inline citations. Tier 1 sources always represented. Delivered at 09:00 IST. |
 | 💬 **RAG query-back** | Ask anything in Telegram. Claude Sonnet answers from your 14-day corpus with citations. Tavily web search fallback on corpus miss. |
 | ⚡ **Circuit breaker** | 3 consecutive feed failures → source marked degraded → Telegram alert fires immediately. |
 | 💰 **Cost-conscious by design** | ~$2–3/month in LLM spend. Runs on a $5/month Railway instance. Total: ~$8/month. |
@@ -95,6 +95,10 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 │  embed query → pgvector search → Claude Sonnet answer   │
 └─────────────────────────────────────────────────────────┘
 ```
+
+<video src="docs/process_flow.mp4" autoplay loop muted playsinline width="100%"></video>
+
+> 🎬 Pipeline animation generated with [**Gemini Omni Flash**](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-omni/) — Google's multimodal video generation model (Google I/O 2026)
 
 ---
 
