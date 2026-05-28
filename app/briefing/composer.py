@@ -34,8 +34,11 @@ _SYSTEM_PROMPT = (
     "       • <i>What it is</i> — one concise sentence summarising the technology. "
     "Wrap model names, version strings, and key metrics in <code>tags</code> "
     "(e.g. <code>Gemini 2.5 Flash</code>, <code>94.7%</code>).\n"
+    "\n"
     "       <blockquote>💡 Why it matters — one sentence on practical impact or implication for AI practitioners.</blockquote>\n"
+    "\n"
     "       🔗 <a href=\"URL\">Read Paper</a>  (use 'Read Paper' for arXiv, 'Read Post' for blogs)\n"
+    "\n"
     "  3. Separate each source group with TWO blank lines. No dashes, no divider characters whatsoever.\n\n"
 
     "FOOTER (output literally):\n"
