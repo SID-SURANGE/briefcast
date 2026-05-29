@@ -34,7 +34,7 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 > **Keep this section current.** Update it at the end of every session or after every feature lands.
 > Claude reads this first — an accurate status here avoids redundant codebase exploration.
 
-### What is built and working (as of 2026-05-25)
+### What is built and working (as of 2026-05-29)
 
 | Layer | File(s) | Status |
 |---|---|---|
@@ -51,8 +51,8 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 | Summariser | `app/processing/summariser.py` | ✅ Gemini Flash via OpenRouter; `summarise(title, abstract, source)`; cost logged |
 | Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
 | Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 03:30 UTC (09:00 IST); deployed on Railway |
-| Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram |
-| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; single-path query UX (no /ask or /chat); `/help` only command; Forum Topics ready |
+| Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram; improved spacing + CTA footer (v1.5.1) |
+| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; single-path query UX; `/start` onboarding + `/help` quick-ref; typing indicator + elapsed time on RAG; article count in drill-down (v1.5.1) |
 | RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
 | RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; similarity gate (0.35); corpus miss → Tavily web fallback; dual system prompts (corpus vs web); full LangSmith pipeline tracing; prompt caching |
 | Web searcher | `app/rag/web_searcher.py` | ✅ Tavily API fallback; fail-safe if `TAVILY_API_KEY` unset; `search_web()` + `build_web_context()` |

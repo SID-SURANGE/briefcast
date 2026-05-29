@@ -35,14 +35,17 @@ _SYSTEM_PROMPT = (
     "Wrap model names, version strings, and key metrics in <code>tags</code> "
     "(e.g. <code>Gemini 2.5 Flash</code>, <code>94.7%</code>).\n"
     "\n"
+    "\n"
     "       <blockquote>💡 Why it matters — one sentence on practical impact or implication for AI practitioners.</blockquote>\n"
     "\n"
     "       🔗 <a href=\"URL\">Read Paper</a>  (use 'Read Paper' for arXiv, 'Read Post' for blogs)\n"
     "\n"
+    "     Output a blank line before the blockquote and a blank line after it (before the 🔗 link). "
+    "Do NOT output the literal text '(blank line here)' — just output the blank line itself.\n"
     "  3. Separate each source group with TWO blank lines. No dashes, no divider characters whatsoever.\n\n"
 
     "FOOTER (output literally):\n"
-    "<i>Briefcast · next briefing tomorrow at 09:00 IST</i>\n\n"
+    "<i>Briefcast · next briefing tomorrow · 💬 tap me to ask anything about today's stories</i>\n\n"
 
     "Rules: AI and ML content only. No preamble. No sign-off. No 'Here is your briefing'. "
     "Never run the bold title and any subtitle on the same line."

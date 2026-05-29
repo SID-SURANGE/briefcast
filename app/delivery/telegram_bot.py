@@ -1,9 +1,10 @@
+import time
 from datetime import datetime, timedelta, timezone
 
 import structlog
 from sqlalchemy import or_
 from telegram import Bot, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.constants import ParseMode
+from telegram.constants import ChatAction, ParseMode
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from app.briefing.composer import COMPANY_GROUPS, close_open_tags
@@ -12,6 +13,7 @@ from app.config import settings
 log = structlog.get_logger()
 
 _COMMANDS = [
+    BotCommand("start", "Introduction and how to use Briefcast"),
     BotCommand("help", "Show how to use this bot"),
 ]
 
@@ -104,17 +106,34 @@ async def send_alert(text: str) -> None:
     log.info("telegram.alert_sent", thread_id=settings.telegram_alert_thread_id)
 
 
+async def _cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message is None:
+        return
+    text = (
+        "👋 <b>Welcome to Briefcast</b>\n\n"
+        "I deliver a daily AI intelligence briefing every morning at <b>09:00 IST</b>, "
+        "pulling from Google AI, Google Research, DeepMind, OpenAI, Hugging Face, and more.\n\n"
+        "🔍 <b>Ask me anything</b> — just type a question like:\n"
+        "  <i>What did Google announce about Gemini this week?</i>\n"
+        "  <i>Any new research on RAG systems?</i>\n\n"
+        "I'll search the last 14 days of ingested news. If nothing matches, "
+        "I'll fall back to a live web search automatically (marked ⚡).\n\n"
+        "That's it — no commands needed beyond this. Just ask."
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+
 async def _cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message is None:
         return
     text = (
-        "<b>Briefcast — your personal AI intelligence bot</b>\n\n"
-        "Just <b>type any question</b> — that's it.\n\n"
-        "🔍 <b>How it works:</b>\n"
-        "  • Your question is searched against the ingested AI news corpus\n"
-        "  • If a match is found → grounded answer with citations\n"
-        "  • If nothing matches → live web search kicks in automatically (⚡)\n\n"
-        "No commands needed. Just ask."
+        "<b>Briefcast — quick reference</b>\n\n"
+        "<b>Query</b>  just type any question\n"
+        "<b>Corpus</b>  last 14 days of ingested AI news\n"
+        "<b>Fallback</b>  live web search if corpus misses (⚡)\n"
+        "<b>Briefing</b>  daily at 09:00 IST\n"
+        "<b>Drill-down</b>  tap source buttons after briefing\n\n"
+        "/start — full intro"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
@@ -130,12 +149,16 @@ async def _run_rag(update: Update, query: str) -> None:
     from app.rag.responder import respond  # noqa: PLC0415
 
     log.info("telegram.rag_query", length=len(query))
+    await update.message.chat.send_action(ChatAction.TYPING)
+    t0 = time.monotonic()
     try:
         answer = await respond(query)
     except Exception as exc:
         log.error("telegram.rag_error", error=str(exc))
         answer = "Sorry, something went wrong. Please try again."
 
+    elapsed = time.monotonic() - t0
+    answer = f"{answer}\n\n<i>⏱ {elapsed:.1f}s</i>"
     await update.message.reply_text(answer, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 
@@ -175,7 +198,7 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
 
-    lines = [f"{emoji} <b>{label} — Today's Deep Dive</b>\n"]
+    lines = [f"{emoji} <b>{label} — Today's Deep Dive</b>  <code>{len(articles)} articles</code>\n"]
     for a in articles:
         lines.append(f"🔷 <b>{a.title}</b>")
         if a.summary:
@@ -196,6 +219,7 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 def build_application() -> Application:
     """Build and return the PTB Application with all handlers registered."""
     app = Application.builder().token(settings.telegram_bot_token).build()
+    app.add_handler(CommandHandler("start", _cmd_start))
     app.add_handler(CommandHandler("help", _cmd_help))
     app.add_handler(CallbackQueryHandler(_on_drill_callback, pattern=r"^drill:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_plain_message))
