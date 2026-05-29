@@ -6,6 +6,20 @@ Versions map to the project's v1 → v1.5 → v2 milestone structure.
 
 ---
 
+## [v1.5.1] — 2026-05-29
+
+### Changed — Telegram bot UX polish
+
+- **Typing indicator** (`telegram_bot.py`) — bot sends `TYPING` chat action before executing a RAG query; user sees "typing…" in Telegram while the pipeline runs instead of silence
+- **RAG response elapsed time** — every query reply now appends `⏱ 2.3s` so you can immediately see latency at a glance without checking logs
+- **Drill-down article count** (`telegram_bot.py`) — source drill-down header now shows `<code>N articles</code>` badge (e.g. `🔵 Google — Today's Deep Dive  5 articles`)
+- **`/start` command** — new onboarding handler; explains briefing schedule, shows example RAG queries, mentions ⚡ web fallback; appears in Telegram command menu
+- **`/help` redesigned as quick-reference** — compact cheatsheet (query, corpus, fallback, briefing time, drill-down); links to `/start` for full intro; no longer redundant with `/start`
+- **Briefing footer CTA** (`composer.py`) — footer changed from `next briefing tomorrow at 09:00 IST` to `next briefing tomorrow · 💬 tap me to ask anything about today's stories`
+- **Briefing blockquote spacing** (`composer.py`) — LLM prompt now explicitly instructs blank lines before and after each `<blockquote>` for visual breathing room; fixed ambiguous `(blank line here)` literal markers that risked being echoed into output
+
+---
+
 ## [v1.5] — 2026-05-25
 
 ### Added
