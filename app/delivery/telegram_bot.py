@@ -153,12 +153,14 @@ async def _run_rag(update: Update, context: ContextTypes.DEFAULT_TYPE, query: st
     chat_id = update.effective_chat.id
 
     async def _keep_typing() -> None:
+        # Sleep first — initial fire is sent below before the task starts.
         # Telegram typing indicator expires after 5s — refresh every 4s until cancelled.
         while True:
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
             await asyncio.sleep(4)
+            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
     log.info("telegram.rag_query", length=len(query))
+    await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     typing_task = asyncio.create_task(_keep_typing())
     t0 = time.monotonic()
     try:

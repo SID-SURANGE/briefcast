@@ -29,6 +29,7 @@ _SYSTEM_PROMPT = (
     "     Emoji per source: Google AI → 🔵  Google Research → 🔵  Google Cloud AI → 🔵  "
     "Google DeepMind → 🔵  OpenAI → ⚫  Anthropic → 🟠  Meta AI → 🔶  "
     "Hugging Face → 🟡  arXiv → 🟥  Microsoft → 🟦  NVIDIA → 🟩  other → 🔹\n"
+    "     The first article <blockquote> card must follow the source header with NO blank line between them.\n"
     "  2. Each article — wrap ALL content in a single <blockquote>...</blockquote> card. "
     "Inside the blockquote, strictly in this order with each element on its own line:\n"
     "       🔷 <b>Full Project or Paper Title</b>\n"
