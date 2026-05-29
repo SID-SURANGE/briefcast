@@ -142,20 +142,32 @@ async def _on_plain_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """All messages → corpus first, Tavily web search fallback on miss."""
     if update.message is None or not update.message.text:
         return
-    await _run_rag(update, update.message.text.strip())
+    await _run_rag(update, context, update.message.text.strip())
 
 
-async def _run_rag(update: Update, query: str) -> None:
+async def _run_rag(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
+    import asyncio  # noqa: PLC0415
+
     from app.rag.responder import respond  # noqa: PLC0415
 
+    chat_id = update.effective_chat.id
+
+    async def _keep_typing() -> None:
+        # Telegram typing indicator expires after 5s — refresh every 4s until cancelled.
+        while True:
+            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            await asyncio.sleep(4)
+
     log.info("telegram.rag_query", length=len(query))
-    await update.message.chat.send_action(ChatAction.TYPING)
+    typing_task = asyncio.create_task(_keep_typing())
     t0 = time.monotonic()
     try:
         answer = await respond(query)
     except Exception as exc:
         log.error("telegram.rag_error", error=str(exc))
         answer = "Sorry, something went wrong. Please try again."
+    finally:
+        typing_task.cancel()
 
     elapsed = time.monotonic() - t0
     answer = f"{answer}\n\n<i>⏱ {elapsed:.1f}s</i>"
@@ -200,12 +212,17 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     lines = [f"{emoji} <b>{label} — Today's Deep Dive</b>  <code>{len(articles)} articles</code>\n"]
     for a in articles:
-        lines.append(f"🔷 <b>{a.title}</b>")
-        if a.summary:
-            snippet = a.summary[:350] + ("…" if len(a.summary) > 350 else "")
-            lines.append(snippet)
         read_label = "Read Paper" if "arxiv" in (a.source_name or "").lower() else "Read Post"
-        lines.append(f'🔗 <a href="{a.url}">{read_label}</a>')
+        snippet = ""
+        if a.summary:
+            raw = a.summary[:300] + ("…" if len(a.summary) > 300 else "")
+            snippet = f"• <i>{raw}</i>\n\n"
+        card = (
+            f"🔷 <b>{a.title}</b>\n"
+            f"{snippet}"
+            f'🔗 <a href="{a.url}">{read_label}</a>'
+        )
+        lines.append(f"<blockquote>{card}</blockquote>")
         lines.append("")
 
     reply = "\n".join(lines).strip()
