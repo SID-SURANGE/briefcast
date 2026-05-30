@@ -183,7 +183,8 @@ briefcast/
 │   ├── delivery/            # telegram_bot.py (primary), slack_bot.py (v1.5)
 │   └── observability/       # structlog setup + cost logging helpers
 ├── scripts/
-│   ├── seed_sources.py        # seed source registry into Postgres
+│   ├── init_db.py             # run migrations + seed sources (used by Docker Compose)
+│   ├── seed_sources.py        # seed sources with live URL verification
 │   ├── dry_run_ingestion.py   # smoke-test registry and fetcher without writing to DB
 │   ├── run_ingestion_once.py  # one-shot ingestion against live DB
 │   ├── run_evals.py           # CLI entry for RAGAS eval harness (--limit / --ids flags)
@@ -209,6 +210,57 @@ briefcast/
 
 ## 🚀 Run it locally
 
+### Option A — Docker (recommended)
+
+Postgres, migrations, source seeding, API, and worker all start with one command.
+
+**1. Clone and configure**
+```bash
+git clone https://github.com/SID-SURANGE/briefcast.git
+cd briefcast
+cp .env.example .env   # Windows: copy .env.example .env
+```
+
+Open `.env` and fill in these four values — everything else is optional:
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-...    # openrouter.ai — free account, add $5 credit
+NOMIC_API_KEY=nk-...               # atlas.nomic.ai — free tier (1M tokens/month)
+TELEGRAM_BOT_TOKEN=123456:ABC...   # create via @BotFather on Telegram
+TELEGRAM_CHAT_ID=987654321         # send /start to @userinfobot to get yours
+```
+
+**2. Start everything**
+```bash
+docker compose up
+```
+
+Docker Compose will:
+- Start a local Postgres + pgvector instance
+- Wait for the DB to be healthy
+- Run Alembic migrations and seed the source registry
+- Start the API server on `http://localhost:8000`
+- Start the worker (ingestion every 6h, briefing at 09:00 IST)
+
+**3. Verify**
+```
+GET http://localhost:8000/healthz  →  {"status": "ok"}
+```
+
+**4. Trigger first ingestion manually**
+
+The worker runs ingestion automatically every 6h and sends a briefing at 09:00 IST — but the DB starts empty. Run a one-off ingestion now so there's something to brief on:
+
+```bash
+docker compose exec worker python scripts/run_ingestion_once.py
+```
+
+Once articles are ingested, your Telegram bot will deliver briefings on schedule and answer questions immediately.
+
+---
+
+### Option B — Manual (for development)
+
 ```powershell
 # 1. Clone and set up virtual environment
 git clone https://github.com/SID-SURANGE/briefcast.git
@@ -218,17 +270,16 @@ python -m venv .venv
 
 # 2. Configure credentials
 copy .env.example .env
-# Fill in: OPENROUTER_API_KEY, NOMIC_API_KEY, TELEGRAM_BOT_TOKEN,
-#          TELEGRAM_CHAT_ID, DATABASE_URL, LANGSMITH_API_KEY
+# Fill in: OPENROUTER_API_KEY, NOMIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Also set: DATABASE_URL=postgresql+psycopg://briefcast:briefcast@localhost:5432/briefcast
 
 # 3. Start Postgres with pgvector
 docker compose up -d db
 
-# 4. Apply migrations
-.venv\Scripts\alembic upgrade head
+# 4. Apply migrations and seed sources
+.venv\Scripts\python scripts/init_db.py
 
-# 5. Seed sources and run first ingestion
-.venv\Scripts\python scripts/seed_sources.py
+# 5. Run first ingestion
 .venv\Scripts\python scripts/run_ingestion_once.py
 
 # 6. Start the API server
