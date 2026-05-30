@@ -9,6 +9,22 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U briefcast"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    command: python scripts/init_db.py
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://briefcast:briefcast@db:5432/briefcast
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
 
   api:
     build: .
@@ -16,15 +32,27 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://briefcast:briefcast@db:5432/briefcast
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
 
   worker:
     build: .
     command: python -m app.worker
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://briefcast:briefcast@db:5432/briefcast
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
 
 volumes:
   pgdata:
