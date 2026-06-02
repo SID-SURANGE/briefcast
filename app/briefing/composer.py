@@ -25,18 +25,28 @@ _SYSTEM_PROMPT = (
     "📅 <b>BRIEFCAST | {DATE}</b>  ·  <code>{COUNT} articles</code>\n\n"
 
     "BODY — group articles by company/source. Use EXACTLY this format for every group:\n\n"
-    "<source_emoji> <b><u>Source Name</u></b>\n"
-    "<blockquote>🔷 <b>Article Title</b>\n"
-    "• <i>One sentence on what it is.</i>\n"
+    "<source_emoji> <b><u>Source Name</u></b>\n\n"
+    "<b>First Article Title</b>\n"
+    "<blockquote expandable>• <i>One sentence on what it is.</i>\n"
     "\n"
     "💡 <i>One sentence on why it matters.</i>\n"
     "\n"
     "🔗 <a href=\"URL\">Read Post</a></blockquote>\n\n"
-    "<source_emoji> <b><u>Next Source</u></b>\n"
-    "<blockquote>...</blockquote>\n\n"
+    "<b>Second Article Title (same source)</b>\n"
+    "<blockquote expandable>• <i>One sentence on what it is.</i>\n"
+    "\n"
+    "💡 <i>One sentence on why it matters.</i>\n"
+    "\n"
+    "🔗 <a href=\"URL\">Read Post</a></blockquote>\n\n"
+    "<source_emoji> <b><u>Next Source</u></b>\n\n"
+    "<b>Article Title</b>\n"
+    "<blockquote expandable>...</blockquote>\n\n"
     "CRITICAL RULES for the format above:\n"
-    "  - Source header and its first <blockquote> are on CONSECUTIVE lines — zero blank lines between them.\n"
-    "  - Each article is ONE <blockquote> block. Do NOT nest blockquotes inside.\n"
+    "  - ONE source header per company — never repeat it between articles from the same source.\n"
+    "  - All articles from the same source follow consecutively under their single header.\n"
+    "  - Article title is OUTSIDE the blockquote — always visible. Only the detail content goes inside <blockquote expandable>.\n"
+    "  - One blank line between source header and first article title. One blank line between articles.\n"
+    "  - Each article's detail content is ONE <blockquote expandable> block. Do NOT nest blockquotes inside.\n"
     "  - The 💡 line is plain italic text inside the blockquote — not a nested blockquote.\n"
     "  - TWO blank lines between source groups. No dashes, no dividers.\n"
     "  - Do NOT output literal placeholder text like '(blank line)' or '<source_emoji>'.\n"
@@ -144,28 +154,32 @@ def close_open_tags(text: str) -> str:
     return text
 
 
-async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str]]:
+async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str], set[str]]:
     """
     Select top articles, call Haiku to compose a Telegram-HTML briefing.
-    Returns (briefing_text, source_keys) where source_keys is the ordered list of
-    unique company keys that appeared in the briefing (used to build drill-down buttons).
+    Returns (briefing_text, source_keys, shown_urls) where source_keys is the ordered
+    list of unique company keys in the briefing (used to build drill-down buttons) and
+    shown_urls is the set of article URLs included in the briefing (used to exclude them
+    from drill-down so only additional articles are shown).
     Caller should pass articles sorted by score descending (output of ranker.rank()).
-    Returns ("", []) if no articles are provided.
+    Returns ("", [], set()) if no articles are provided.
     """
     if not articles:
         log.warning("composer.no_articles")
-        return "", []
+        return "", [], set()
 
     selected = _select(articles)
 
     # Collect unique company keys in appearance order for the inline keyboard
     source_keys: list[str] = []
     seen: set[str] = set()
+    shown_urls: set[str] = set()
     for a in selected:
         key = _company_key(a.get("source_name", ""))
         if key not in seen:
             source_keys.append(key)
             seen.add(key)
+        shown_urls.add(a.get("url", ""))
 
     user_prompt = _build_user_prompt(selected)
 
@@ -214,4 +228,4 @@ async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str]]:
     )
     text = close_open_tags(text)
     log.info("composer.done", selected=len(selected), latency_ms=round(latency_ms, 1))
-    return text, source_keys
+    return text, source_keys, shown_urls

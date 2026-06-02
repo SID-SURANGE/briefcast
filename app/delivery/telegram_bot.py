@@ -19,6 +19,9 @@ _COMMANDS = [
 
 _TELEGRAM_MAX_CHARS = 4096
 
+# URLs of articles included in the most recent briefing — used to exclude them from drill-down
+_briefing_shown_urls: set[str] = set()
+
 # Display label and emoji per company key — used for drill-down buttons and headers
 _COMPANY_DISPLAY: dict[str, tuple[str, str]] = {
     "google": ("🔵", "Google"),
@@ -65,12 +68,15 @@ def _trim_to_last_article(text: str) -> str:
     return close_open_tags(trimmed)
 
 
-async def send_briefing(text: str, source_keys: list[str] | None = None) -> None:
+async def send_briefing(text: str, source_keys: list[str] | None = None, shown_urls: set[str] | None = None) -> None:
     """Send the daily briefing with optional drill-down buttons per company.
 
     If TELEGRAM_BRIEFING_THREAD_ID is set (Forum Topics supergroup), the briefing
     is posted into that topic thread instead of the main chat.
     """
+    global _briefing_shown_urls
+    _briefing_shown_urls = shown_urls or set()
+
     original_len = len(text)
     text = _trim_to_last_article(text)
     if len(text) < original_len:
@@ -197,6 +203,7 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 Article.deleted_at.is_(None),
                 Article.published_at >= cutoff,
                 or_(*[Article.source_name.ilike(f"%{p}%") for p in patterns]),
+                Article.url.notin_(_briefing_shown_urls) if _briefing_shown_urls else True,
             )
             .order_by(Article.score.desc().nullslast())
             .limit(8)
@@ -207,7 +214,7 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not articles:
         await cq.message.reply_text(
-            f"No articles from {label} in the last 36 hours.",
+            f"{emoji} <b>{label}</b> — no additional articles beyond what's in today's briefing.",
             parse_mode=ParseMode.HTML,
         )
         return
