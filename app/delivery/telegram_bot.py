@@ -7,7 +7,7 @@ from telegram import Bot, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
-from app.briefing.composer import COMPANY_GROUPS, close_open_tags
+from app.briefing.composer import COMPANY_GROUPS, _select, close_open_tags
 from app.config import settings
 
 log = structlog.get_logger()
@@ -18,9 +18,6 @@ _COMMANDS = [
 ]
 
 _TELEGRAM_MAX_CHARS = 4096
-
-# URLs of articles included in the most recent briefing — used to exclude them from drill-down
-_briefing_shown_urls: set[str] = set()
 
 # Display label and emoji per company key — used for drill-down buttons and headers
 _COMPANY_DISPLAY: dict[str, tuple[str, str]] = {
@@ -73,10 +70,9 @@ async def send_briefing(text: str, source_keys: list[str] | None = None, shown_u
 
     If TELEGRAM_BRIEFING_THREAD_ID is set (Forum Topics supergroup), the briefing
     is posted into that topic thread instead of the main chat.
+    shown_urls is accepted for API compatibility but is no longer used — drill-down
+    re-derives excluded URLs from the DB to work across separate worker/API processes.
     """
-    global _briefing_shown_urls
-    _briefing_shown_urls = shown_urls or set()
-
     original_len = len(text)
     text = _trim_to_last_article(text)
     if len(text) < original_len:
@@ -183,7 +179,7 @@ async def _run_rag(update: Update, context: ContextTypes.DEFAULT_TYPE, query: st
 
 
 async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle drill-down button taps — show all articles from that company in the last 36h."""
+    """Handle drill-down button taps — show articles from that company not already in the briefing."""
     from app.db import SessionLocal  # noqa: PLC0415
     from app.models.article import Article  # noqa: PLC0415
 
@@ -197,13 +193,27 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=36)
     db = SessionLocal()
     try:
+        # Re-derive which URLs were in the briefing by re-running selection on recent articles.
+        # This is deterministic and works across separate API/worker processes.
+        all_recent = (
+            db.query(Article)
+            .filter(Article.deleted_at.is_(None), Article.published_at >= cutoff)
+            .order_by(Article.score.desc().nullslast())
+            .all()
+        )
+        all_dicts = [
+            {"url": a.url, "source_name": a.source_name or "", "source_tier": a.source_tier}
+            for a in all_recent
+        ]
+        shown_urls = {a["url"] for a in _select(all_dicts)}
+
         articles = (
             db.query(Article)
             .filter(
                 Article.deleted_at.is_(None),
                 Article.published_at >= cutoff,
                 or_(*[Article.source_name.ilike(f"%{p}%") for p in patterns]),
-                Article.url.notin_(_briefing_shown_urls) if _briefing_shown_urls else True,
+                Article.url.notin_(shown_urls),
             )
             .order_by(Article.score.desc().nullslast())
             .limit(8)
@@ -214,7 +224,7 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not articles:
         await cq.message.reply_text(
-            f"{emoji} <b>{label}</b> — no additional articles beyond what's in today's briefing.",
+            f"{emoji} <b>{label}</b> — no additional articles beyond what's already in today's briefing.",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -226,12 +236,10 @@ async def _on_drill_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if a.summary:
             raw = a.summary[:300] + ("…" if len(a.summary) > 300 else "")
             snippet = f"• <i>{raw}</i>\n\n"
-        card = (
-            f"🔷 <b>{a.title}</b>\n"
-            f"{snippet}"
-            f'🔗 <a href="{a.url}">{read_label}</a>'
+        lines.append(f"🔷 <b>{a.title}</b>")
+        lines.append(
+            f"<blockquote expandable>{snippet}🔗 <a href=\"{a.url}\">{read_label}</a></blockquote>"
         )
-        lines.append(f"<blockquote>{card}</blockquote>")
         lines.append("")
 
     reply = "\n".join(lines).strip()

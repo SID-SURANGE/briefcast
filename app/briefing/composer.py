@@ -86,6 +86,11 @@ COMPANY_GROUPS: dict[str, list[str]] = {
 }
 
 
+def _select_shown_urls(articles: list[dict[str, Any]]) -> set[str]:
+    """Return the set of URLs that would be included in a briefing for the given articles."""
+    return {a.get("url", "") for a in _select(articles)}
+
+
 def _company_key(source_name: str) -> str:
     """Map a source name to a company key for diversity capping."""
     name_lower = source_name.lower()
