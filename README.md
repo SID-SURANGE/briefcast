@@ -4,7 +4,7 @@
 
 <h1 align="center">📡 Briefcast</h1>
 
-<p align="center"><b>Your personal AI intelligence briefing agent.</b><br>
+<p align="center"><b>Your personal AI intelligence briefing agent</b><br>
 Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to Telegram. Answers your follow-up questions.</p>
 
 <p align="center">
