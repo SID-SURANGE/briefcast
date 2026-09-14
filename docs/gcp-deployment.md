@@ -57,23 +57,22 @@ gcloud run deploy briefcast-api `
   --region <REGION> `
   --min-instances 0 `
   --allow-unauthenticated `
-  --set-env-vars "OPENROUTER_API_KEY=...,NOMIC_API_KEY=...,DATABASE_URL=...,LANGSMITH_TRACING=true,LANGSMITH_API_KEY=...,LANGSMITH_PROJECT=briefcast-prod,LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com,DEDUP_THRESHOLD=0.92,TAVILY_API_KEY=..."
+  --set-env-vars "OPENROUTER_API_KEY=...,NOMIC_API_KEY=...,DATABASE_URL=...,DEDUP_THRESHOLD=0.92"
 ```
 
 `--min-instances 0` is what makes this scale-to-zero — there's no webhook to
 keep warm now that Telegram is gone (ADR 013), so idle time costs nothing.
 
-> **Known gap**: `--allow-unauthenticated` means `/` and `/ask` are public on
-> the Cloud Run URL. This matches the project's "no auth system" requirement
-> (single-user personal tool), but it also means anyone with the URL can
-> trigger RAG queries and run up OpenRouter/Tavily cost. A cheap fast-follow
-> if that becomes a concern: a shared-secret query param, or switch to
-> `--no-allow-unauthenticated` + Identity-Aware Proxy for just yourself. Not
-> built as part of this change.
+> **Known gap**: `--allow-unauthenticated` means `/` is public on the Cloud
+> Run URL. This matches the project's "no auth system" requirement
+> (single-user personal tool). RAG query-back is parked (ADR 015), so the
+> main cost-exposure risk this used to carry — unauthenticated requests
+> triggering paid LLM/web-search calls — isn't currently live; revisit this
+> gap if RAG is restored.
 
 **Prefer Secret Manager over plaintext `--set-env-vars`** for
-`DATABASE_URL`, `OPENROUTER_API_KEY`, `NOMIC_API_KEY`, `TAVILY_API_KEY`, and
-`LANGSMITH_API_KEY` in any deployment you intend to keep running:
+`DATABASE_URL`, `OPENROUTER_API_KEY`, and `NOMIC_API_KEY` in any deployment
+you intend to keep running:
 
 ```powershell
 echo "<value>" | gcloud secrets create briefcast-database-url --data-file=-
@@ -190,10 +189,9 @@ GET https://<CLOUD_RUN_URL>/healthz  →  {"status": "ok"}
 
 # Digest page
 GET https://<CLOUD_RUN_URL>/  →  renders the briefing persisted in Step 8
-
-# RAG query
-GET https://<CLOUD_RUN_URL>/ask  →  form; submit a question, expect a grounded, cited answer
 ```
+
+RAG query-back (`/ask`) is parked — see [ADR 015](../decisions/015-park-rag-query-back.md) — so there's nothing to verify there until it's restored.
 
 ---
 

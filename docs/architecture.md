@@ -67,25 +67,13 @@ flowchart TD
         SEL --> COMP --> WEB_OUT
     end
 
-    %% ─── RAG ────────────────────────────────────────────────────
-    subgraph RAG["🔍 RAG Query Layer  ·  scale-to-zero · FastAPI"]
-        direction TB
-        WEBUI["Web form\nGET /ask · POST /api/ask"]
-        QEMB["nomic-embed-text-v1.5\nEmbed user query"]
-        RETR["pgvector cosine search\nk=10 · 14-day rolling window"]
-        GEN["Claude Sonnet · OpenRouter\nGrounded answer + inline citations"]
-        WEB_REPLY["Render answer on the page"]
-
-        WEBUI --> QEMB --> RETR --> GEN --> WEB_REPLY
-    end
-
     %% ─── INFRA ──────────────────────────────────────────────────
     subgraph INFRA["☁️ Infrastructure · Google Cloud"]
         direction LR
         API["Cloud Run\nAPI service · scale-to-zero"]
         JOBS["Cloud Run Jobs + Cloud Scheduler\ningest 6h · briefing 03:30 UTC"]
         NEON["Neon\nPostgres + pgvector · free tier"]
-        OBS["Observability\nLangSmith tracing\nstructlog JSON + cost logging"]
+        OBS["Observability\nstructlog JSON + cost logging"]
     end
 
     %% ─── CONNECTIONS ────────────────────────────────────────────
@@ -95,9 +83,7 @@ flowchart TD
     DB --> RANK
     RANK --> BRIEF
     DB --> BRIEF
-    DB --> RAG
     INFRA -.->|hosts| BRIEF
-    INFRA -.->|hosts| RAG
 
     %% ─── STYLES ─────────────────────────────────────────────────
     classDef google fill:#e8f4fd,stroke:#4285f4,color:#1a1a1a
@@ -106,7 +92,6 @@ flowchart TD
     classDef processing fill:#f3e5f5,stroke:#8e24aa,color:#1a1a1a
     classDef ranking fill:#e8f5e9,stroke:#2e7d32,color:#1a1a1a
     classDef briefing fill:#fce4ec,stroke:#c62828,color:#1a1a1a
-    classDef rag fill:#e3f2fd,stroke:#1565c0,color:#1a1a1a
     classDef infra fill:#efebe9,stroke:#4e342e,color:#1a1a1a
 
     class T1,G1,G2,G3,G4 google
@@ -115,6 +100,9 @@ flowchart TD
     class PROC,SUM,EMB,DB processing
     class RANK,SCORE,PERSIST ranking
     class BRIEF,SEL,COMP,WEB_OUT briefing
-    class RAG,WEBUI,QEMB,RETR,GEN,WEB_REPLY rag
     class INFRA,API,JOBS,NEON,OBS infra
 ```
+
+> RAG query-back (embed query → pgvector search → Claude Sonnet answer) is
+> parked, not diagrammed here — see [ADR 015](../decisions/015-park-rag-query-back.md)
+> and [`archive/rag/`](../archive/rag/README.md).

@@ -13,7 +13,7 @@ cp .env.example .env
 
 ### `OPENROUTER_API_KEY`
 
-OpenRouter is the single LLM gateway for all three models: Gemini Flash (summarisation), Claude Haiku (briefing), and Claude Sonnet (RAG).
+OpenRouter is the single LLM gateway for both active models: Gemini Flash (summarisation) and Claude Haiku (briefing).
 
 1. Go to [openrouter.ai](https://openrouter.ai) and create a free account.
 2. Navigate to **Keys** → **Create Key**.
@@ -61,51 +61,10 @@ alembic upgrade head
 
 ---
 
-## LangSmith tracing
-
-LangSmith traces every LangChain LCEL call (RAG chains). Free tier gives 5,000 traces/month — enough for personal use. All three variables are needed together; leave all unset to disable tracing entirely.
-
-### `LANGSMITH_TRACING`
-
-```
-LANGSMITH_TRACING=true
-```
-
-Set to `true` to enable. Omit or set to `false` to disable (no traces sent, no API key needed).
-
----
-
-### `LANGSMITH_API_KEY`
-
-1. Go to [smith.langchain.com](https://smith.langchain.com) and sign up.
-2. Navigate to **Settings** → **API Keys** → **Create API Key**.
-3. Copy the key (starts with `lsv2_...`).
-
-```
-LANGSMITH_API_KEY=lsv2_pt_...
-```
-
----
-
-### `LANGSMITH_PROJECT`
-
-The project name that groups traces in the LangSmith UI. Use any string — `briefcast-dev` is a sensible default.
-
-```
-LANGSMITH_PROJECT=briefcast-dev
-```
-
----
-
-### `LANGSMITH_ENDPOINT`
-
-The regional API endpoint for your LangSmith account. Check your LangSmith portal for the correct URL.
-
-```
-LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com   # APAC
-# or
-LANGSMITH_ENDPOINT=https://api.smith.langchain.com        # US (default)
-```
+> `LANGSMITH_*` and `TAVILY_API_KEY` are parked along with RAG query-back —
+> see [ADR 015](../decisions/015-park-rag-query-back.md) and
+> [`archive/rag/README.md`](../archive/rag/README.md) for setup instructions
+> when that feature is restored.
 
 ---
 
@@ -134,12 +93,6 @@ This value can be changed at any time without touching code — just update `.en
 OPENROUTER_API_KEY=sk-or-v1-...
 NOMIC_API_KEY=nk-...
 DATABASE_URL=postgresql+psycopg://briefcast:briefcast@localhost:5432/briefcast
-
-# LangSmith
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=lsv2_pt_...
-LANGSMITH_PROJECT=briefcast-dev
-LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com
 
 # Tuning
 DEDUP_THRESHOLD=0.92

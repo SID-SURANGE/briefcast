@@ -6,6 +6,17 @@ Versions map to the project's v1 → v1.5 → v2 milestone structure.
 
 ---
 
+## [Unreleased]
+
+### Changed — RAG query-back parked
+- **Removed RAG from the active app**, archived intact in `archive/rag/` rather than deleted — see ADR 015.
+- Query frequency was never actually measured; the feature had accreted a RAGAS eval harness, full LangSmith pipeline tracing, and prompt-cache tuning disproportionate to a single user's occasional questions. Parking it forces that to be re-justified by real usage data rather than assumed.
+- `app/rag/`, `evals/`, `scripts/run_evals.py`, `tests/test_retriever.py`, `docs/eval-harness.md`, `docs/langsmith-tracing.md`, and `app/templates/ask.html` moved to `archive/rag/` with a restore guide.
+- `app/config.py` drops `rag_min_similarity`, `tavily_api_key`, `langsmith_*`. `pyproject.toml` drops `langchain`, `langchain-openai`, `ragas`, `datasets`, `python-multipart`.
+- `GET /ask` and `POST /api/ask` removed from `app/delivery/web.py`; digest page (`GET /`) is unaffected.
+
+---
+
 ## [v1.6] — 2026-09-14
 
 ### Changed — Web delivery, replacing Telegram

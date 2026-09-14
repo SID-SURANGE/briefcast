@@ -224,7 +224,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Eval reports (generated output — not source code)
-evals/reports/*.json
+archive/rag/evals/reports/*.json
 
 # cursor kit
 cursor-team-kit/
