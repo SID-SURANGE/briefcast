@@ -16,9 +16,25 @@
   `gcloud config set project <PROJECT_ID>`)
 - A Neon account — [neon.com](https://neon.com) — free tier, no credit card
 - All other credentials ready (see `docs/env-setup.md`)
-- Code pushed to a container registry Cloud Run can pull from (Artifact
-  Registry, built via `gcloud builds submit`, or any registry you push to
-  manually)
+
+---
+
+## Step 0 — Enable APIs and create the Artifact Registry repo
+
+Google Container Registry (`gcr.io`) is deprecated — this uses Artifact
+Registry instead. One-time setup:
+
+```powershell
+gcloud services enable run.googleapis.com cloudscheduler.googleapis.com `
+  artifactregistry.googleapis.com cloudbuild.googleapis.com iam.googleapis.com
+
+gcloud artifacts repositories create briefcast `
+  --repository-format=docker `
+  --location=<REGION> `
+  --description="Briefcast container images"
+```
+
+Every image reference below is `<REGION>-docker.pkg.dev/<PROJECT_ID>/briefcast/briefcast`.
 
 ---
 
@@ -41,11 +57,13 @@
 ## Step 2 — Build and push the image
 
 ```powershell
-gcloud builds submit --tag gcr.io/<PROJECT_ID>/briefcast .
+gcloud builds submit --tag <REGION>-docker.pkg.dev/<PROJECT_ID>/briefcast/briefcast .
 ```
 
 The same image is used for the API service and both Cloud Run Jobs — only the
-container command differs per resource.
+container command differs per resource. (This step is also what the CI/CD
+workflow automates — see the **CI/CD** section below once the manual path
+here works end-to-end.)
 
 ---
 
@@ -53,7 +71,7 @@ container command differs per resource.
 
 ```powershell
 gcloud run deploy briefcast-api `
-  --image gcr.io/<PROJECT_ID>/briefcast `
+  --image <REGION>-docker.pkg.dev/<PROJECT_ID>/briefcast/briefcast `
   --region <REGION> `
   --min-instances 0 `
   --allow-unauthenticated `
@@ -88,7 +106,7 @@ Note the public URL Cloud Run prints (e.g.
 
 ```powershell
 gcloud run jobs create briefcast-ingest `
-  --image gcr.io/<PROJECT_ID>/briefcast `
+  --image <REGION>-docker.pkg.dev/<PROJECT_ID>/briefcast/briefcast `
   --region <REGION> `
   --command python `
   --args scripts/run_ingestion_once.py `
@@ -97,7 +115,7 @@ gcloud run jobs create briefcast-ingest `
   --set-env-vars "OPENROUTER_API_KEY=...,NOMIC_API_KEY=...,DATABASE_URL=...,DEDUP_THRESHOLD=0.92"
 
 gcloud run jobs create briefcast-briefing `
-  --image gcr.io/<PROJECT_ID>/briefcast `
+  --image <REGION>-docker.pkg.dev/<PROJECT_ID>/briefcast/briefcast `
   --region <REGION> `
   --command python `
   --args scripts/run_briefing_once.py `
@@ -207,10 +225,97 @@ RAG query-back (`/ask`) is parked — see [ADR 015](../decisions/015-park-rag-qu
 
 ## Redeployment
 
-`gcloud builds submit` + `gcloud run deploy` (or wire up Cloud Build triggers
-on push, if you want Railway-style auto-deploy). Migrations are **not** run
-automatically — run `alembic upgrade head` manually after schema changes,
-same as before.
+Manual: repeat Step 2 (`gcloud builds submit`) then Step 3's `gcloud run
+deploy` with the new image tag, and `gcloud run jobs update` for the two
+Jobs. Or use the CI/CD workflow below, which does exactly that on a manual
+trigger. Migrations are **not** run automatically either way — run `alembic
+upgrade head` yourself after a schema change (the CI/CD workflow has an
+optional migration step, off by default — see below).
+
+---
+
+## CI/CD — GitHub Actions (manual trigger)
+
+`.github/workflows/deploy.yml` builds the image, pushes it to Artifact
+Registry, redeploys the Cloud Run service, and updates both Cloud Run Jobs
+to the new image. It runs only on `workflow_dispatch` (you click "Run
+workflow" in the GitHub Actions tab) — no auto-deploy on push, so nothing
+ships without you choosing to ship it. Revisit that once the app has been
+stable for a while, per the README roadmap.
+
+Auth uses **Workload Identity Federation** — no long-lived GCP key is
+stored in GitHub. This needs a one-time bootstrap:
+
+### One-time GCP bootstrap (run locally, once)
+
+```powershell
+$PROJECT_ID = "<PROJECT_ID>"
+$PROJECT_NUMBER = gcloud projects describe $PROJECT_ID --format="value(projectNumber)"
+$REPO = "SID-SURANGE/briefcast"   # <owner>/<repo>, exact match required
+
+# Pool + OIDC provider trusting only this GitHub repo
+gcloud iam workload-identity-pools create "github-pool" `
+  --project=$PROJECT_ID --location="global" --display-name="GitHub Actions"
+
+gcloud iam workload-identity-pools providers create-oidc "github-provider" `
+  --project=$PROJECT_ID --location="global" `
+  --workload-identity-pool="github-pool" `
+  --display-name="GitHub Actions Provider" `
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" `
+  --attribute-condition="assertion.repository=='$REPO'" `
+  --issuer-uri="https://token.actions.githubusercontent.com"
+
+# Deployer service account — this is what GitHub Actions impersonates, never a key
+gcloud iam service-accounts create "github-deployer" `
+  --project=$PROJECT_ID --display-name="GitHub Actions Deployer"
+$DEPLOYER_SA = "github-deployer@$PROJECT_ID.iam.gserviceaccount.com"
+
+gcloud iam service-accounts add-iam-policy-binding $DEPLOYER_SA `
+  --project=$PROJECT_ID `
+  --role="roles/iam.workloadIdentityUser" `
+  --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/$REPO"
+
+# Minimum roles to build, push, and deploy
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$DEPLOYER_SA" --role="roles/run.admin"
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$DEPLOYER_SA" --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$DEPLOYER_SA" --role="roles/artifactregistry.writer"
+
+# Print the provider resource name you'll need below
+gcloud iam workload-identity-pools providers describe "github-provider" `
+  --project=$PROJECT_ID --location="global" --workload-identity-pool="github-pool" `
+  --format="value(name)"
+```
+
+### GitHub repo configuration
+
+**Settings → Secrets and variables → Actions → Variables** (not secret — these
+are identifiers, not credentials):
+
+| Variable | Value |
+|---|---|
+| `GCP_PROJECT_ID` | your project ID |
+| `GCP_REGION` | e.g. `us-central1` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | the full resource name printed above (`projects/.../workloadIdentityPools/github-pool/providers/github-provider`) |
+| `GCP_SERVICE_ACCOUNT` | `github-deployer@<PROJECT_ID>.iam.gserviceaccount.com` |
+
+**Settings → Secrets and variables → Actions → Secrets** (actual credentials):
+
+| Secret | Value |
+|---|---|
+| `NEON_DATABASE_URL` | only needed if you ever tick the optional "run migrations" input — the pooled Neon connection string |
+
+The service's own runtime secrets (`OPENROUTER_API_KEY`, `NOMIC_API_KEY`,
+`DATABASE_URL`) live in GCP Secret Manager (Step 3) or as Cloud Run env
+vars set during the first manual deploy — `gcloud run deploy` without
+`--set-env-vars`/`--update-secrets` on a redeploy preserves whatever the
+previous revision had, so the CI/CD workflow doesn't need to touch them at
+all after that first manual deploy.
+
+### Running it
+
+GitHub → **Actions** tab → **Deploy to Cloud Run** → **Run workflow**. Leave
+"run migrations" unchecked unless you've actually changed the schema since
+the last deploy.
 
 ---
 

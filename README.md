@@ -283,6 +283,11 @@ traffic/data volume.
 
 Full walkthrough: [`docs/gcp-deployment.md`](docs/gcp-deployment.md)
 
+**CI/CD**: `.github/workflows/deploy.yml` builds, pushes, and redeploys via
+Workload Identity Federation (no GCP key stored in GitHub) — manual trigger
+only (`workflow_dispatch`), so nothing ships without a deliberate click. Setup
+is in the same doc.
+
 ### Prerequisites
 
 - Google Cloud project with billing enabled + `gcloud` CLI authenticated

@@ -1,0 +1,76 @@
+name: Deploy to Cloud Run
+
+# Manual trigger only, by design (see docs/gcp-deployment.md) — nothing ships
+# without someone clicking "Run workflow". Revisit auto-deploy-on-push once
+# the app has been stable for a while.
+on:
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: "Run alembic upgrade head against Neon before deploying"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation
+
+env:
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/briefcast/briefcast
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build image
+        run: |
+          docker build \
+            -t "${{ env.IMAGE }}:${{ github.sha }}" \
+            -t "${{ env.IMAGE }}:latest" \
+            .
+
+      - name: Push image
+        run: |
+          docker push "${{ env.IMAGE }}:${{ github.sha }}"
+          docker push "${{ env.IMAGE }}:latest"
+
+      - name: Run migrations
+        if: ${{ inputs.run_migrations }}
+        run: |
+          docker run --rm \
+            -e DATABASE_URL="${{ secrets.NEON_DATABASE_URL }}" \
+            "${{ env.IMAGE }}:${{ github.sha }}" \
+            alembic upgrade head
+
+      - name: Deploy API service
+        run: |
+          gcloud run deploy briefcast-api \
+            --image "${{ env.IMAGE }}:${{ github.sha }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --min-instances 0 \
+            --allow-unauthenticated \
+            --quiet
+
+      - name: Update Cloud Run Jobs
+        run: |
+          gcloud run jobs update briefcast-ingest \
+            --image "${{ env.IMAGE }}:${{ github.sha }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --quiet
+          gcloud run jobs update briefcast-briefing \
+            --image "${{ env.IMAGE }}:${{ github.sha }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --quiet
