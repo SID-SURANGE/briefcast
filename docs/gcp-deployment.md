@@ -162,8 +162,8 @@ $env:DATABASE_URL="postgresql+psycopg://...neon.tech/...?sslmode=require"
 .venv\Scripts\python scripts/seed_sources.py
 ```
 
-Expected output is identical to the Railway walkthrough — 8/8 sources
-reachable, `sources` table populated.
+Expected output: 4/4 sources reachable, `sources` table populated with the
+Google-only registry (ADR 016).
 
 ---
 

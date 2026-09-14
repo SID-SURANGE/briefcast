@@ -17,15 +17,15 @@ This repo is open-source. Every decision must be safe for public GitHub.
 
 | Field | Value |
 |---|---|
-| What it is | Personal AI intelligence briefing pipeline + RAG query-back |
+| What it is | Personal Google AI intelligence briefing pipeline (RAG query-back parked — ADR 015) |
 | Who uses it | Solo developer · single user · personal tool |
-| Why it exists | Stay current on AI · build RAG engineering depth · strengthen Google profile |
-| Delivery channel | Telegram (primary) — see delivery section |
+| Why it exists | Stay current on Google AI · strengthen Google profile (ADR 005, ADR 016) |
+| Delivery channel | Web UI (FastAPI + Jinja2) — see delivery section. Telegram removed, see ADR 013. |
 | Open source | Yes. No scraping. No full-text storage. No credentials in code. Ever. |
 
-**One-line description:** A self-hosted pipeline that ingests AI ecosystem updates via RSS/APIs,
-deduplicates and ranks them (Google-first), delivers a daily briefing via Telegram,
-and answers grounded follow-up questions over a rolling 14-day corpus.
+**One-line description:** A self-hosted pipeline that ingests Google's own AI blogs via RSS,
+deduplicates and ranks them, and composes a daily briefing rendered on a web page with a
+browsable archive. RAG query-back over the corpus exists but is archived/parked, not active.
 
 ---
 
@@ -34,81 +34,40 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 > **Keep this section current.** Update it at the end of every session or after every feature lands.
 > Claude reads this first — an accurate status here avoids redundant codebase exploration.
 
-### What is built and working (as of 2026-05-29)
+### What is built and working (as of 2026-09-14)
 
 | Layer | File(s) | Status |
 |---|---|---|
-| Config | `app/config.py` | ✅ pydantic-settings, all env vars, DEDUP_THRESHOLD |
-| DB session | `app/db.py` | ✅ SQLAlchemy engine; normalises `postgresql://` → `postgresql+psycopg://` for Railway compat |
-| Models | `app/models/article.py`, `source.py`, `base.py` | ✅ full schema with pgvector, soft-delete |
-| Migrations | `alembic/versions/0001_*`, `0002_*` | ✅ applied on Railway; pgvector extension + both tables |
-| API server | `app/main.py` | ✅ FastAPI + `/healthz` + `POST /telegram` webhook; deployed on Railway |
-| Observability | `app/observability/logger.py` | ✅ `configure_logging()` JSON structlog; `log_llm_call()` with all required fields |
-| RSS + arXiv fetcher | `app/ingestion/fetcher.py` | ✅ `fetch_rss()` feedparser+httpx; `fetch_arxiv()` Atom XML |
-| Deduplication | `app/ingestion/dedup.py` | ✅ L1 SHA-256 hash; L2 cosine (numpy); `is_duplicate(url, embedding, db)` |
-| Embedder | `app/processing/embedder.py` | ✅ Nomic API; `embed()` + `embed_batch()`; task_type param |
-| Circuit breaker | `app/ingestion/circuit_breaker.py` | ✅ 3-strike → `degraded` on Source row; `record_success/failure/is_open(name, db)` |
-| Summariser | `app/processing/summariser.py` | ✅ Gemini Flash via OpenRouter; `summarise(title, abstract, source)`; cost logged |
-| Ranker | `app/ranking/ranker.py` | ✅ `score()` + `rank()`; tier/recency/novelty weights; pairwise novelty via numpy |
-| Worker | `app/worker.py` | ✅ AsyncIOScheduler; `run_ingestion()` every 6h; `run_briefing()` 03:30 UTC (09:00 IST); deployed on Railway |
-| Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; selects top 6–8 with Tier 1 guarantee; HTML for Telegram; improved spacing + CTA footer (v1.5.1) |
-| Telegram bot | `app/delivery/telegram_bot.py` | ✅ `send_briefing()`, `send_alert()`; single-path query UX; `/start` onboarding + `/help` quick-ref; typing indicator + elapsed time on RAG; article count in drill-down (v1.5.1) |
-| RAG retriever | `app/rag/retriever.py` | ✅ pgvector `.cosine_distance()`; 14-day filter; optional tier filter; returns similarity score |
-| RAG responder | `app/rag/responder.py` | ✅ Sonnet via OpenRouter; similarity gate (0.35); corpus miss → Tavily web fallback; dual system prompts (corpus vs web); full LangSmith pipeline tracing; prompt caching |
-| Web searcher | `app/rag/web_searcher.py` | ✅ Tavily API fallback; fail-safe if `TAVILY_API_KEY` unset; `search_web()` + `build_web_context()` |
-| Source registry | `app/ingestion/registry.py` | ✅ 8 sources (4 Tier 1 Google + 4 Tier 2); all URLs verified live |
-| Source seeding | `scripts/seed_sources.py` | ✅ 8/8 sources seeded into Railway Postgres |
-| One-shot ingestion | `scripts/run_ingestion_once.py` | ✅ first live ingestion running against Railway DB (in progress 2026-05-19) |
-| Alembic env | `alembic/env.py` | ✅ URL scheme normalised; migrations run clean on Railway |
-| Classifier | `app/ingestion/classifier.py` | ✅ LLM-based relevance filter (Gemini Flash); YES/NO; narrowed to model releases, research, system design, observability tools |
-| Tests | `tests/test_dedup.py`, `test_ranker.py`, `test_retriever.py` | ✅ 32/32 passing |
-| Eval harness | `evals/eval_runner.py`, `scripts/run_evals.py` | ✅ RAGAS 4-metric harness (faithfulness, answer_relevancy, context_precision, context_recall); 20 Q&A pairs in `evals/questions.json`; Haiku as judge LLM; reports saved to `evals/reports/` |
-| Railway deployment | API + Worker services | ✅ both deployed; API public domain active |
+| Config | `app/config.py` | ✅ pydantic-settings; RAG-only settings removed (ADR 015) |
+| DB session | `app/db.py` | ✅ SQLAlchemy engine; `pool_recycle=280` for Neon's connection behavior |
+| Models | `app/models/article.py`, `source.py`, `briefing.py`, `base.py` | ✅ full schema with pgvector, soft-delete; `Briefing` persists composed digests |
+| Migrations | `alembic/versions/0001_*`–`0003_*` | ✅ pgvector extension, articles/sources, briefings table |
+| API server | `app/main.py` | ✅ FastAPI + `/healthz`; mounts `app/delivery/web.py` router; no webhook (Telegram removed, ADR 013) |
+| Web delivery | `app/delivery/web.py`, `app/templates/` | ✅ `GET /` digest + source health, `GET /archive` + `GET /archive/{id}` browsable history, `app/delivery/sanitize.py` (bleach) sanitizes LLM HTML before `\| safe` render |
+| Observability | `app/observability/logger.py` | ✅ `configure_logging()` JSON structlog; `log_llm_call()`. LangSmith removed with RAG (ADR 015) |
+| RSS fetcher | `app/ingestion/fetcher.py` | ✅ `fetch_rss()` feedparser+httpx (`fetch_arxiv()` still present but unused — no arXiv source active) |
+| Deduplication | `app/ingestion/dedup.py` | ✅ L1 SHA-256 hash; L2 cosine (numpy) |
+| Embedder | `app/processing/embedder.py` | ✅ Nomic API |
+| Circuit breaker | `app/ingestion/circuit_breaker.py` | ✅ 3-strike → `degraded`; surfaced on web dashboard source-health panel (no more Telegram alert) |
+| Summariser | `app/processing/summariser.py` | ✅ Gemini Flash via OpenRouter |
+| Ranker | `app/ranking/ranker.py` | ✅ tier/recency/novelty weights; tier term is now a constant (every remaining source is tier 1 — see ADR 016) |
+| Worker | `app/worker.py` | ✅ APScheduler locally; `run_ingestion()` every 6h, `run_briefing()` 03:30 UTC — persists to `Briefing` table, no Telegram send |
+| Composer | `app/briefing/composer.py` | ✅ Haiku via OpenRouter; top 8, capped 3 per source blog (ADR 016 — was per-company, now per-blog since registry is Google-only) |
+| Source registry | `app/ingestion/registry.py` | ✅ **4 sources, Google-family only** (ADR 016) — Google AI Blog, Google Research Blog, Google Cloud AI Blog, Google DeepMind Blog. `sync_sources()` soft-deletes any DB row no longer in the registry |
+| Tests | `tests/test_dedup.py`, `test_ranker.py` | ✅ passing (`test_retriever.py` archived with RAG) |
+| Deployment | Cloud Run + Cloud Scheduler + Neon | Target platform per ADR 014 — see `docs/gcp-deployment.md`. Live-deployment status not yet confirmed in this file; check Railway/Cloud Run dashboards directly rather than trusting a stale note here |
 
-### Known verified feed URLs
-- Meta AI Blog: `https://engineering.fb.com/feed/` (ai.meta.com/blog/rss/ returns 404)
-- OpenAI News: `https://openai.com/news/rss.xml` (openai.com/news/rss/ returns 403)
-
-### Railway deployment details
-- API service: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
-- Worker service: `python -m app.worker`
-- DB: Railway Postgres; internal host `postgres.railway.internal:5432`; public host `centerbeam.proxy.rlwy.net:11559`
-- Telegram bot: `@BrfCastBot` — webhook registered, bot page live at `t.me/BrfCastBot`
-- Local Docker DB: stopped — all work now targets Railway Postgres via public URL
+**Parked/archived, not deleted:**
+- RAG query-back (retriever, responder, Tavily fallback, `/ask`, RAGAS eval harness, LangSmith tracing) — `archive/rag/`, restore guide in `archive/rag/README.md`, decision in ADR 015
+- Telegram delivery — fully removed (not archived), ADR 013. Code is in git history (pre-`feature/web-delivery-gcp-migration` branch) if ever needed for reference
+- Non-Google sources (OpenAI, Hugging Face, Meta, arXiv, Microsoft, NVIDIA) — removed from the registry, not archived as code (they were just RSS URLs + tier/classification metadata, trivial to re-add to `SOURCES` if ADR 016 is ever reversed)
 
 ### What remains
+- Confirm live GCP deployment status (Cloud Run service + 2 Jobs + 2 Scheduler triggers + Neon) — `docs/gcp-deployment.md` has the walkthrough; this file does not track live deployment state, don't assume it's done from anything written here
+- Candidate next feature (not started): flashcards generated from digest summaries — see conversation/README roadmap, no ADR yet
 
-| Step | What it needs |
-|---|---|
-| Confirm first ingestion completes | `run_ingestion_once.py` running — watch for `ranker.done` in logs |
-| Trigger manual briefing | Run `run_briefing()` locally pointing at Railway DB to get first Telegram message |
-| Confirm scheduled briefing fires | Daily at 13:00 IST via Railway worker — check Railway worker logs |
-| Add Tavily key to Railway | Set `TAVILY_API_KEY` in Railway dashboard — enables web search fallback for out-of-corpus queries |
-| Monitor first week | Check Railway logs for circuit breaker trips or 402s; run `scripts/cost_report.py` |
-| Run eval harness | `python scripts/run_evals.py --limit 5` for a smoke test; `python scripts/run_evals.py` for full 20-question run against live Railway DB |
-| Forum Topics (optional, v1.5) | Create Telegram Supergroup → enable Topics → get thread IDs → set `TELEGRAM_BRIEFING_THREAD_ID` + `TELEGRAM_ALERT_THREAD_ID` |
-
-### Current BrfCastBot setup — what to do now vs later
-
-**Now (no changes needed):** The bot works as-is in your private chat with `@BrfCastBot`.
-- **Just type any question** — single path: corpus first, Tavily web search fallback on miss (⚡ marked)
-- `/help` → shows how the bot works
-- No other commands — `/ask` and `/chat` have been removed (see ADR 011)
-- Briefings and alerts continue posting to the same private chat (Forum Topics not required)
-
-**Later (v1.5 — Forum Topics):** When you want organised channels instead of one flat chat:
-1. Create a new Telegram Supergroup (not the existing bot chat — bots can't be in private chats as topics)
-2. Group Settings → Enable Topics
-3. Create topics: 📰 Daily Briefing · ⚠️ Alerts · ❓ Ask (optional label — bot replies in-thread anyway)
-4. Add `@BrfCastBot` to the group as admin with "Post Messages" permission
-5. Right-click each topic → Copy Link → extract the integer at the end of the URL
-6. Set `TELEGRAM_BRIEFING_THREAD_ID` and `TELEGRAM_ALERT_THREAD_ID` in Railway
-7. Change `TELEGRAM_CHAT_ID` to the group ID (Telegram group IDs start with `-100`)
-8. No code changes needed — the delivery layer already handles `message_thread_id=None` gracefully
-
-### Recommended next step
-
-**Verify LangSmith traces appear on Railway.** Check Railway API logs for `responder.tracing enabled=True`. If `enabled=False`, set `LANGSMITH_TRACING=true` in Railway dashboard. Send a plain message to the bot and confirm the `rag_pipeline` run appears in LangSmith with all child spans (embed_query, vector_retrieve, ChatOpenAI).
+### Recent architectural decisions (read the ADRs, don't assume from summaries)
+ADR 013 (web UI over Telegram) → ADR 014 (Cloud Run + Neon over Railway) → ADR 015 (park RAG) → ADR 016 (Google-only sources) — these four landed across two sessions and materially changed almost every section below this point in the file. Sections further down (Delivery, Deployment, Models, Observability, File Structure) may still describe the pre-ADR-013 state in places — treat this "Current State" section and the ADRs as the source of truth over older prose elsewhere in this file until a full pass reconciles it.
 
 ---
 
@@ -132,35 +91,35 @@ and answers grounded follow-up questions over a rolling 14-day corpus.
 
 ---
 
-## Source Universe — Tiered, Google-First
+## Source Universe — Google-Only (ADR 016)
 
-All sources use Mode A (summary + metadata) unless noted. Storage mode B = abstract stored (arXiv only).
-New source checklist: (a) URL tested live · (b) ToS reviewed · (c) classification tag assigned · (d) storage mode set.
+**As of ADR 016 (2026-09-14), Briefcast ingests Google sources exclusively.** This is a
+deliberate narrowing from the earlier "Google-first, but 8 sources total" design — read
+[ADR 016](decisions/016-google-only-sources.md) before adding any non-Google source back;
+doing so reverses a documented decision, not a gap to casually fill.
 
-### Active Sources (v1)
+All sources use Mode A (summary + metadata). No Mode B (abstract) source is currently active
+— arXiv was removed in ADR 016; the Mode B code path still exists in `app/models/source.py`'s
+`storage_mode` field for if it's ever needed again.
+
+New source checklist: (a) URL tested live · (b) ToS reviewed · (c) classification tag assigned ·
+(d) storage mode set · (e) **confirms with the user first** — the registry being Google-only is
+a decision, not a default.
+
+### Active Sources
 
 | Tier | Source | Feed / Endpoint | Status |
 |---|---|---|---|
-| 1 | Google AI Blog | `https://blog.google/technology/ai/rss/` | verify live |
-| 1 | Google Research Blog | `https://research.google/blog/rss/` | verify live |
-| 1 | Google Cloud AI Blog | `https://cloudblog.withgoogle.com/rss/` | verify live — filter AI/ML tags |
-| 1 | Google DeepMind Blog | `https://deepmind.google/blog/rss.xml` | verify live |
-| 2 | OpenAI | `https://openai.com/news/rss.xml` | verified (rss/ path returns 403) |
-| 2 | Meta AI Blog | `https://engineering.fb.com/feed/` | verified (ai.meta.com/blog/rss/ returns 404) |
-| 2 | Hugging Face Blog | `https://huggingface.co/blog/feed.xml` | verify live |
-| 2 | Microsoft AI Blog | `https://blogs.microsoft.com/ai/feed/` | verified |
-| 2 | NVIDIA Blog | `https://blogs.nvidia.com/feed/` | verified |
-| 2 | Arxiv cs.AI + cs.LG | `https://export.arxiv.org/api/query` | verified · Mode B |
+| 1 | Google AI Blog | `https://blog.google/technology/ai/rss/` | verified live |
+| 1 | Google Research Blog | `https://research.google/blog/rss/` | verified live |
+| 1 | Google Cloud AI Blog | `https://cloudblog.withgoogle.com/rss/` | verified live |
+| 1 | Google DeepMind Blog | `https://deepmind.google/blog/rss.xml` | verified live |
 
-### Planned Sources
+### Removed (ADR 016) — not planned, not disabled, removed
 
-| Tier | Source | Notes | Version |
-|---|---|---|---|
-| 2 | Anthropic | No native feed confirmed — check `anthropic.com/news` | v1 |
-| 2 | Mistral AI | Check `mistral.ai/news` for feed path | v1 |
-| 3 | DeepSeek / Qwen / Kimi | GitHub Releases + HuggingFace — verify access + ToS | v1.5 |
-| 4 | Import AI · Ahead of AI · The Gradient | Substack/RSS — verify | v1.5 |
-| v2 | X / Twitter | `TWITTER_BEARER_TOKEN` required · store URL + handle + summary only | v2 |
+OpenAI, Hugging Face, Meta AI, arXiv cs.AI+cs.LG, Microsoft AI, NVIDIA. Their feed URLs and
+verification notes from the pre-016 registry are preserved in git history
+(`app/ingestion/registry.py` before this change) if ever needed to re-add one.
 
 **Hard exclusions:** HTML scraping · paywalled sources · region-restricted endpoints · sources prohibiting automated access.
 
@@ -321,25 +280,27 @@ TELEGRAM_ALERT_THREAD_ID      # optional — Forum Topics supergroup thread ID f
 
 ---
 
-## Delivery: Telegram
+## Delivery: Web (Telegram removed — ADR 013)
 
-Telegram replaces Slack as the primary delivery channel.
+Telegram was the original delivery channel (ADR 008, superseding an earlier Slack plan) but
+was fully removed in ADR 013: the user stopped checking it, and a push channel nobody checks
+has the same failure mode as no channel at all. `app/delivery/telegram_bot.py` no longer
+exists — do not recreate it without the user explicitly asking; this was a considered removal,
+not an oversight.
 
-**Why Telegram:**
-- Zero-cost setup — create bot via BotFather in 2 minutes, get `TELEGRAM_BOT_TOKEN`
-- No OAuth flow, no app manifest, no workspace approval, no 90-day history limit
-- Unlimited message history on free accounts
-- `python-telegram-bot` SDK is mature, well-documented, actively maintained
-- Cleaner fit for solo personal tool; Slack makes sense for team/enterprise contexts
+**Current delivery — `app/delivery/web.py` (FastAPI + Jinja2, no build step):**
+- `GET /` — latest composed briefing (persisted to the `Briefing` table by `worker.py`) + a
+  source-health panel reading `Source.circuit_breaker_state` directly (replaces the old
+  Telegram alert-on-degrade)
+- `GET /archive` — list of all past briefings; `GET /archive/{id}` — one archived briefing
+- LLM-composed HTML is sanitized (`app/delivery/sanitize.py`, bleach allowlist) before being
+  rendered with Jinja's `\| safe` — Telegram used to strip unsupported tags client-side as an
+  incidental safety net; the browser has none, so this sanitization step is load-bearing, not
+  decorative. Don't remove it even if it looks redundant.
 
-**Delivery modes:**
-- Briefings: bot sends formatted message to your personal chat ID daily at 08:00 local
-- Alerts: circuit breaker degradations and ingestion failures post to same chat
-- Query-back: reply to any message; FastAPI handles Telegram webhook or long-polling
-
-**Slack:** Not required in v1. Can be added as v1.5 delivery extension in `app/delivery/slack_bot.py`.
-The delivery layer in `app/delivery/` is abstracted — adding Slack is one new file, not a refactor.
-See ADR `008-telegram-over-slack.md`.
+`app/delivery/slack_bot.py` is an unwired stub (`send_briefing()` that does nothing) predating
+this rework — not connected to `main.py` or `worker.py`. Leave it alone unless asked to build it
+out or remove it explicitly; it's dead code, not a delivery option.
 
 ---
 

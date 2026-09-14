@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -16,7 +18,7 @@ class SourceDefinition(BaseModel):
 # Single source of truth for all registered sources.
 # Add new sources here; sync_sources() propagates them to the DB.
 SOURCES: list[SourceDefinition] = [
-    # ── Tier 1: Google AI Family ─────────────────────────────────────────
+    # ── Google AI Family (all active sources — see ADR 016) ──────────────
     SourceDefinition(
         name="Google AI Blog",
         feed_url="https://blog.google/technology/ai/rss/",
@@ -45,66 +47,28 @@ SOURCES: list[SourceDefinition] = [
         classification="verify-before-enabling",
         storage_mode="summary_metadata",
     ),
-    # ── Tier 2: Major AI Labs ────────────────────────────────────────────
-    SourceDefinition(
-        name="OpenAI News",
-        feed_url="https://openai.com/news/rss.xml",
-        feed_type="rss", tier=2,
-        classification="verify-before-enabling",
-        storage_mode="summary_metadata",
-    ),
-    SourceDefinition(
-        name="Hugging Face Blog",
-        feed_url="https://huggingface.co/blog/feed.xml",
-        feed_type="rss", tier=2,
-        classification="verify-before-enabling",
-        storage_mode="summary_metadata",
-    ),
-    SourceDefinition(
-        name="Meta AI Blog",
-        feed_url="https://engineering.fb.com/feed/",
-        feed_type="rss", tier=2,
-        classification="verify-before-enabling",
-        storage_mode="summary_metadata",
-    ),
-    # arXiv: feed_url stores the search query passed to fetch_arxiv()
-    SourceDefinition(
-        name="arXiv cs.AI + cs.LG",
-        feed_url="cat:cs.AI OR cat:cs.LG",
-        feed_type="arxiv_api", tier=2,
-        classification="verified-official",
-        storage_mode="abstract_metadata",
-    ),
-    SourceDefinition(
-        name="Microsoft AI Blog",
-        feed_url="https://blogs.microsoft.com/ai/feed/",
-        feed_type="rss", tier=2,
-        classification="verified-official",
-        storage_mode="summary_metadata",
-    ),
-    SourceDefinition(
-        name="NVIDIA Blog",
-        feed_url="https://blogs.nvidia.com/feed/",
-        feed_type="rss", tier=2,
-        classification="verified-official",
-        storage_mode="summary_metadata",
-    ),
-    # Anthropic, Mistral, Cohere: no confirmed RSS URL — add when verified
-    # xAI (x.ai/blog): no RSS feed published yet — revisit when available
+    # Non-Google sources (OpenAI, Hugging Face, Meta, arXiv, Microsoft, NVIDIA)
+    # were removed in ADR 016 — Briefcast is now Google-family-only by design,
+    # not because those feeds went dead. See decisions/016-google-only-sources.md.
 ]
 
 # Definition-only fields — runtime state columns are never overwritten by a sync
 _DEFINITION_FIELDS = {"name", "feed_url", "feed_type", "tier", "classification", "storage_mode"}
 
 
-def sync_sources(db: Session) -> tuple[int, int]:
+def sync_sources(db: Session) -> tuple[int, int, int]:
     """Upsert SOURCES registry into the sources table.
 
     Only definition fields are written; runtime state (circuit_breaker_state,
     consecutive_failures, last_fetched_at) is left untouched on existing rows.
-    Returns (inserted, updated).
+    Any existing active source whose name is no longer in SOURCES is soft-deleted
+    (deleted_at set) rather than left behind to keep being fetched — the registry
+    is the single source of truth for what's active, removals included.
+    Returns (inserted, updated, soft_deleted).
     """
-    inserted = updated = 0
+    inserted = updated = soft_deleted = 0
+    registry_names = {defn.name for defn in SOURCES}
+
     for defn in SOURCES:
         row = db.query(Source).filter_by(name=defn.name).first()
         if row is None:
@@ -115,5 +79,15 @@ def sync_sources(db: Session) -> tuple[int, int]:
             for field in _DEFINITION_FIELDS:
                 setattr(row, field, getattr(defn, field))
             updated += 1
+
+    stale_rows = (
+        db.query(Source)
+        .filter(Source.deleted_at.is_(None), ~Source.name.in_(registry_names))
+        .all()
+    )
+    for row in stale_rows:
+        row.deleted_at = datetime.now(tz=timezone.utc)
+        soft_deleted += 1
+
     db.commit()
-    return inserted, updated
+    return inserted, updated, soft_deleted

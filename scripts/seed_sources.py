@@ -50,8 +50,8 @@ async def main() -> None:
 
     db = SessionLocal()
     try:
-        inserted, updated = sync_sources(db)
-        print(f"DB sync: {inserted} inserted, {updated} updated")
+        inserted, updated, soft_deleted = sync_sources(db)
+        print(f"DB sync: {inserted} inserted, {updated} updated, {soft_deleted} soft-deleted (no longer in registry)")
 
         total = db.execute(__import__("sqlalchemy").text("SELECT COUNT(*) FROM sources")).scalar()
         print(f"sources table now has {total} row(s)")

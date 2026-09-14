@@ -1,15 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Digest · Briefcast{% endblock %}
+{% block title %}{{ "Archived digest" if archived else "Digest" }} · Briefcast{% endblock %}
 {% block content %}
+  {% if archived %}
+  <p class="meta"><a href="/archive">← Back to archive</a></p>
+  {% endif %}
   <section class="card">
     {% if briefing %}
-      <p class="meta">Published {{ briefing.published_at.strftime("%Y-%m-%d %H:%M UTC") }} · {{ briefing.article_count }} articles</p>
+      {% if archived %}
+        <p class="meta">Archived briefing from {{ briefing.published_at.strftime("%Y-%m-%d %H:%M UTC") }} · {{ briefing.article_count }} articles</p>
+      {% else %}
+        <p class="meta">Published {{ briefing.published_at.strftime("%Y-%m-%d %H:%M UTC") }} · {{ briefing.article_count }} articles</p>
+      {% endif %}
       <div class="briefing-body">{{ briefing.html_content | safe }}</div>
     {% else %}
       <p class="empty">No briefing yet. The pipeline runs on a schedule — check back after the next ingestion cycle.</p>
     {% endif %}
   </section>
 
+  {% if not archived %}
   <section class="card">
     <h2>Source health</h2>
     <table>
@@ -28,4 +36,5 @@
       </tbody>
     </table>
   </section>
+  {% endif %}
 {% endblock %}

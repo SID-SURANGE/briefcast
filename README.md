@@ -5,7 +5,7 @@
 <h1 align="center">📡 Briefcast</h1>
 
 <p align="center"><b>Your personal AI intelligence briefing agent.</b><br>
-Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to a web page you open. Answers your follow-up questions.</p>
+Ingests the Google AI ecosystem. Ranks what matters. Delivers a daily briefing to a web page you open, with a browsable archive.</p>
 
 <p align="center">
   <img src="docs/images/repo_header.png" alt="Briefcast — personal AI intelligence briefing agent" width="100%">
@@ -23,12 +23,12 @@ Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to a web
 
 ## 🧠 What it does
 
-Briefcast runs a fully automated pipeline that monitors **Google AI, Google DeepMind, OpenAI, Anthropic, Meta AI, Hugging Face, Microsoft AI, NVIDIA, and arXiv** — then composes a curated, ranked intelligence briefing you read on a web page, no app to check.
+Briefcast runs a fully automated pipeline that monitors **Google's own AI blogs — Google AI, Google Research, Google Cloud AI, and Google DeepMind** — then composes a curated, ranked intelligence briefing you read on a web page, no app to check. Past briefings are archived and browsable.
 
-Ask a follow-up question on the same page and it answers from a **grounded, cited 14-day rolling knowledge base** — no hallucinations, sources always shown.
+This is a deliberate narrowing, not a limitation — see [ADR 016](decisions/016-google-only-sources.md) for why the corpus is Google-only rather than Google-weighted.
 
 ```
-Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Web → Answer
+Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Web
 ```
 
 **No scraping. No paywalls. No raw article text stored. Open source.**
@@ -44,10 +44,11 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Web → 
 
 | Feature | Detail |
 |---|---|
-| 🥇 **Tiered source ranking** | Google AI family always surfaces first. Tier 1 → Tier 2 → arXiv. |
+| 🔵 **Google-only corpus** | 4 sources, all Google: AI Blog, Research Blog, Cloud AI Blog, DeepMind Blog. Narrowed deliberately — see [ADR 016](decisions/016-google-only-sources.md). |
 | 🔁 **2-layer deduplication** | SHA-256 URL hash (O(1)) + cosine similarity to catch near-duplicates across sources. |
 | ✍️ **AI summarisation** | Gemini 2.5 Flash generates a tight 3–5 sentence summary per article. |
-| 📰 **Daily briefing** | Claude Haiku composes a top 6–8 briefing with mandatory inline citations. Tier 1 sources always represented. Composed at 09:00 IST, persisted, and rendered on `GET /`. |
+| 📰 **Daily briefing** | Claude Haiku composes a top 6–8 briefing with mandatory inline citations, capped per source blog so one busy blog can't crowd out the others. Composed at 09:00 IST, persisted, and rendered on `GET /`. |
+| 🗄️ **Digest archive** | Every past briefing stays browsable at `GET /archive` — no data lost, no external channel to lose track of. |
 | ⚡ **Circuit breaker** | 3 consecutive feed failures → source marked degraded → shown on the web dashboard's source-health panel. |
 | 💰 **Cost-conscious by design** | ~$2–3/month, all of it LLM spend — Cloud Run, Cloud Scheduler, and Neon all sit inside their free tiers at this traffic volume. |
 
@@ -62,9 +63,9 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Web → 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  📥 Sources (RSS / Official APIs)                       │
-│  Google AI · DeepMind · OpenAI · Anthropic               │
-│  Meta AI · Hugging Face · Microsoft · NVIDIA · arXiv    │
+│  📥 Sources (RSS, Google-only — ADR 016)                │
+│  Google AI Blog · Google Research · Google Cloud AI      │
+│  Google DeepMind                                         │
 └────────────────────┬────────────────────────────────────┘
                      │ every 6h (APScheduler)
                      ▼
@@ -86,8 +87,9 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Web → 
                      ▼
 ┌─────────────────────────────────────────────────────────┐
 │  📬 Briefing → Web                                       │
-│  Claude Haiku · top 10 items · citations mandatory      │
-│  persisted to DB · rendered at GET /                    │
+│  Claude Haiku · top 6–8 items · citations mandatory     │
+│  persisted to DB · rendered at GET / · archived at       │
+│  GET /archive                                            │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -113,7 +115,7 @@ pipeline currently ends at the web digest.
 | Embeddings | Nomic API `nomic-embed-text-v1.5` | Free tier, 1M tokens/month, zero RAM overhead |
 | LLM gateway | OpenRouter | One API key for all models — swap with one param change |
 | Delivery | FastAPI + Jinja2 web UI | `GET /` digest — see [ADR 013](decisions/013-web-delivery-over-telegram.md) |
-| Ingestion | feedparser + httpx | RSS/Atom + arXiv Atom API |
+| Ingestion | feedparser + httpx | RSS/Atom, 4 Google-family feeds (ADR 016) |
 | Observability | structlog (JSON) | Structured cost logging per LLM call |
 | Deployment | Google Cloud Run + Cloud Scheduler + Neon | Scale-to-zero API + 2 batch Jobs + free-tier Postgres |
 
@@ -163,8 +165,8 @@ briefcast/
 │   ├── processing/          # summariser (Gemini Flash), embedder (Nomic)
 │   ├── ranking/             # weighted ranker
 │   ├── briefing/            # composer (Claude Haiku)
-│   ├── delivery/            # web.py — digest route (Jinja2), sanitize.py
-│   ├── templates/           # base.html, digest.html
+│   ├── delivery/            # web.py — digest + archive routes (Jinja2), sanitize.py
+│   ├── templates/           # base.html, digest.html, archive.html
 │   ├── static/               # style.css
 │   └── observability/       # structlog setup + cost logging helpers
 ├── scripts/
@@ -317,7 +319,6 @@ Briefcast is built around ethical, attribution-respecting ingestion:
 - **No full article body stored** — only our AI-generated summaries + metadata
 - **No scraping** — RSS/Atom feeds and official APIs only
 - **No paywalled sources** — ever
-- **arXiv abstracts** stored directly (open programmatic access, designed for discovery indexing)
 - **Soft-delete** on all content tables — nothing is hard-deleted
 
 See [`docs/POLICY.md`](docs/POLICY.md) for the complete ingestion and storage policy.
@@ -377,6 +378,7 @@ A cross-cutting design FAQ covering chunking, model selection, ranking, and retr
 | [`013`](decisions/013-web-delivery-over-telegram.md) | Web UI over Telegram — no push notification, but no dark channel either; briefings now persisted, not just piped to a bot |
 | [`014`](decisions/014-cloud-run-neon-over-railway.md) | Cloud Run + Neon over Railway — scale-to-zero compute + free-tier Postgres cut cost from ~$7–8/mo to ~$2–3/mo |
 | [`015`](decisions/015-park-rag-query-back.md) | Park RAG query-back until usage is measured — archived intact in `archive/rag/`, not deleted |
+| [`016`](decisions/016-google-only-sources.md) | Google-family-only source registry — narrowed from 9 sources to 4, same career-alignment motivation as ADR 005 taken further |
 | [`FAQ`](decisions/design-faq.md) | Deep-dive: chunking, dedup thresholds, ranking weights, retrieval k, model rationale |
 
 ---
@@ -384,10 +386,10 @@ A cross-cutting design FAQ covering chunking, model selection, ranking, and retr
 ## 🗺️ Roadmap
 
 - [x] Web delivery + GCP migration — Cloud Run + Cloud Scheduler + Neon, replacing Telegram + Railway
+- [x] Digest archive — browse every past briefing at `GET /archive`
+- [x] Google-only source registry — narrowed from 9 sources to 4, see ADR 016
 - [ ] Restore RAG query-back — parked in `archive/rag/`, revisit once web-digest usage data shows follow-up questions are actually wanted (ADR 015)
-- [ ] Tier 3 sources — DeepSeek, Qwen, Kimi, Mistral
-- [ ] Tier 4 newsletters — Import AI, Ahead of AI, The Gradient
-- [ ] Hybrid BM25 + vector search — measure vector baseline first
+- [ ] Flash cards from digest content — spaced-recall quiz generated from summaries, candidate next feature (lower build cost than RAG, no new infra)
 
 ---
 

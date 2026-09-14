@@ -31,8 +31,8 @@ def main() -> None:
     log.info("init_db.seed_start")
     db = SessionLocal()
     try:
-        inserted, updated = sync_sources(db)
-        log.info("init_db.seed_done", inserted=inserted, updated=updated)
+        inserted, updated, soft_deleted = sync_sources(db)
+        log.info("init_db.seed_done", inserted=inserted, updated=updated, soft_deleted=soft_deleted)
     finally:
         db.close()
 

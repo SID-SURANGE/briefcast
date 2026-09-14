@@ -24,7 +24,7 @@ _SYSTEM_PROMPT = (
     "HEADER (output literally, substituting DATE and COUNT from the user prompt):\n"
     "📅 <b>BRIEFCAST | {DATE}</b>  ·  <code>{COUNT} articles</code>\n\n"
 
-    "BODY — group articles by company/source. Use EXACTLY this format for every group:\n\n"
+    "BODY — group articles by source blog. Use EXACTLY this format for every group:\n\n"
     "<source_emoji> <b><u>Source Name</u></b>\n\n"
     "<b>First Article Title</b>\n"
     "<blockquote>• <i>One sentence on what it is.</i>\n"
@@ -42,7 +42,7 @@ _SYSTEM_PROMPT = (
     "<b>Article Title</b>\n"
     "<blockquote>...</blockquote>\n\n"
     "CRITICAL RULES for the format above:\n"
-    "  - ONE source header per company — never repeat it between articles from the same source.\n"
+    "  - ONE source header per blog — never repeat it between articles from the same source.\n"
     "  - All articles from the same source follow consecutively under their single header.\n"
     "  - Article title is OUTSIDE the blockquote — always visible. Only the detail content goes inside <blockquote>.\n"
     "  - One blank line between source header and first article title. One blank line between articles.\n"
@@ -50,12 +50,11 @@ _SYSTEM_PROMPT = (
     "  - The 💡 line is plain italic text inside the blockquote — not a nested blockquote.\n"
     "  - TWO blank lines between source groups. No dashes, no dividers.\n"
     "  - Do NOT output literal placeholder text like '(blank line)' or '<source_emoji>'.\n"
-    "  Emoji per source: Google AI → 🔵  Google Research → 🔵  Google Cloud AI → 🔵  "
-    "Google DeepMind → 🔵  OpenAI → ⚫  Anthropic → 🟠  Meta AI → 🔶  "
-    "Hugging Face → 🟡  arXiv → 🟥  Microsoft → 🟦  NVIDIA → 🟩  other → 🔹\n"
+    "  Emoji per source: Google AI Blog → 🔵  Google Research Blog → 🔵  "
+    "Google Cloud AI Blog → 🔵  Google DeepMind Blog → 🔵  other → 🔹\n"
     "  Wrap model names, version strings, and key metrics in <code>tags</code> "
     "(e.g. <code>Gemini 2.5 Flash</code>, <code>94.7%</code>) in the • line.\n"
-    "  Use 'Read Paper' for arXiv, 'Read Post' for all other sources.\n\n"
+    "  Use 'Read Post' for all sources.\n\n"
 
     "FOOTER (output literally):\n"
     "<i>Briefcast · next briefing tomorrow · 💬 type any question to dig deeper into today's stories</i>\n\n"
@@ -64,67 +63,33 @@ _SYSTEM_PROMPT = (
     "Never run the bold title and any subtitle on the same line."
 )
 
-_MAX_ITEMS = 10
-_DEFAULT_MAX_PER_COMPANY = 2
-_COMPANY_CAP_OVERRIDES: dict[str, int] = {
-    "google": 4,  # Tier 1 priority — up to 4 Google/DeepMind articles
-}
-
-# Source name substrings that belong to the same company for diversity capping.
-COMPANY_GROUPS: dict[str, list[str]] = {
-    "google": ["google", "deepmind"],
-    "openai": ["openai"],
-    "anthropic": ["anthropic"],
-    "meta": ["meta"],
-    "huggingface": ["hugging face", "huggingface"],
-    "arxiv": ["arxiv"],
-    "mistral": ["mistral"],
-    "cohere": ["cohere"],
-    "microsoft": ["microsoft"],
-    "nvidia": ["nvidia"],
-    "xai": ["xai", "grok"],
-}
+_MAX_ITEMS = 8
+# Per-blog cap, not per-company: the registry is Google-family-only (see ADR 016),
+# so there's no longer a cross-company balance to strike — this just stops one
+# blog having a big publishing day from crowding out the other three.
+_DEFAULT_MAX_PER_SOURCE = 3
 
 
-def _select_shown_urls(articles: list[dict[str, Any]]) -> set[str]:
-    """Return the set of URLs that would be included in a briefing for the given articles."""
-    return {a.get("url", "") for a in _select(articles)}
-
-
-def _company_key(source_name: str) -> str:
-    """Map a source name to a company key for diversity capping."""
-    name_lower = source_name.lower()
-    for key, patterns in COMPANY_GROUPS.items():
-        if any(p in name_lower for p in patterns):
-            return key
-    return name_lower
+def _source_key(source_name: str) -> str:
+    """Diversity-capping key — one entry per exact source blog."""
+    return source_name.lower()
 
 
 def _select(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Pick up to _MAX_ITEMS articles with per-company diversity cap.
-    Guarantees at least one Tier 1 article if any exist in the corpus.
+    Pick up to _MAX_ITEMS articles with a per-source diversity cap.
     Articles must be pre-sorted by score descending.
     """
     selected: list[dict[str, Any]] = []
-    company_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
 
     for article in articles:
         if len(selected) >= _MAX_ITEMS:
             break
-        key = _company_key(article.get("source_name", ""))
-        cap = _COMPANY_CAP_OVERRIDES.get(key, _DEFAULT_MAX_PER_COMPANY)
-        if company_counts.get(key, 0) < cap:
+        key = _source_key(article.get("source_name", ""))
+        if source_counts.get(key, 0) < _DEFAULT_MAX_PER_SOURCE:
             selected.append(article)
-            company_counts[key] = company_counts.get(key, 0) + 1
-
-    # Guarantee at least one Tier 1 if none made it through
-    has_tier1 = any(a.get("source_tier") == 1 for a in selected)
-    if not has_tier1:
-        for article in articles:
-            if article.get("source_tier") == 1 and article not in selected:
-                selected[-1] = article
-                break
+            source_counts[key] = source_counts.get(key, 0) + 1
 
     return selected
 
@@ -163,7 +128,7 @@ async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str], set[s
     """
     Select top articles, call Haiku to compose an HTML briefing.
     Returns (briefing_text, source_keys, shown_urls) where source_keys is the ordered
-    list of unique company keys in the briefing and shown_urls is the set of article
+    list of unique source keys in the briefing and shown_urls is the set of article
     URLs included in the briefing.
     Caller should pass articles sorted by score descending (output of ranker.rank()).
     Returns ("", [], set()) if no articles are provided.
@@ -174,12 +139,13 @@ async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str], set[s
 
     selected = _select(articles)
 
-    # Collect unique company keys in appearance order for the inline keyboard
+    # Collect unique source keys in appearance order (kept for a possible future
+    # archive/filter view — not read by the current web page).
     source_keys: list[str] = []
     seen: set[str] = set()
     shown_urls: set[str] = set()
     for a in selected:
-        key = _company_key(a.get("source_name", ""))
+        key = _source_key(a.get("source_name", ""))
         if key not in seen:
             source_keys.append(key)
             seen.add(key)
