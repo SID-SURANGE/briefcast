@@ -31,7 +31,6 @@ def record_failure(source_name: str, db: Session) -> None:
             source=source_name,
             consecutive_failures=source.consecutive_failures,
         )
-        # Telegram alert is sent by the worker after detecting degraded state
     db.commit()
 
 

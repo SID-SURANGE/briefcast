@@ -3,12 +3,6 @@
 > Paste the Mermaid code below into [mermaid.live](https://mermaid.live) to render and export as PNG/SVG.
 > Renders automatically in GitHub README and Notion.
 
-## Sample output
-
-This is what the pipeline delivers to Telegram every morning at 09:00 IST:
-
-![Sample Briefcast briefing in Telegram](images/Sample_brief.png)
-
 ```mermaid
 flowchart TD
     %% ─── SOURCES ───────────────────────────────────────────────
@@ -38,7 +32,7 @@ flowchart TD
         L1["Dedup L1\nURL SHA-256 hash · O(1)"]
         KW["LLM relevance classifier\nGemini Flash · YES/NO · fails open"]
         L2["Dedup L2\nCosine similarity of title embedding\nthreshold 0.92 · window 500 recent"]
-        CB["Circuit Breaker\n3 failures → degraded → Telegram alert"]
+        CB["Circuit Breaker\n3 failures → degraded → shown on web dashboard"]
 
         FETCH --> L1 --> KW --> L2
         FETCH --> CB
@@ -67,29 +61,30 @@ flowchart TD
     subgraph BRIEF["📅 Briefing Layer  ·  03:30 UTC · 09:00 IST"]
         direction TB
         SEL["Select top 10 articles\nmax 4 Google · max 2 per other company"]
-        COMP["Claude Haiku · OpenRouter\nCompose Telegram HTML briefing"]
-        TG_OUT["python-telegram-bot\nDeliver to @BrfCastBot"]
+        COMP["Claude Haiku · OpenRouter\nCompose HTML briefing"]
+        WEB_OUT["Persist to briefings table\nrendered at GET /"]
 
-        SEL --> COMP --> TG_OUT
+        SEL --> COMP --> WEB_OUT
     end
 
     %% ─── RAG ────────────────────────────────────────────────────
-    subgraph RAG["🔍 RAG Query Layer  ·  always-on · FastAPI"]
+    subgraph RAG["🔍 RAG Query Layer  ·  scale-to-zero · FastAPI"]
         direction TB
-        WEBHOOK["Telegram Webhook\nPOST /telegram"]
+        WEBUI["Web form\nGET /ask · POST /api/ask"]
         QEMB["nomic-embed-text-v1.5\nEmbed user query"]
         RETR["pgvector cosine search\nk=10 · 14-day rolling window"]
         GEN["Claude Sonnet · OpenRouter\nGrounded answer + inline citations"]
-        TG_REPLY["Reply to Telegram chat"]
+        WEB_REPLY["Render answer on the page"]
 
-        WEBHOOK --> QEMB --> RETR --> GEN --> TG_REPLY
+        WEBUI --> QEMB --> RETR --> GEN --> WEB_REPLY
     end
 
     %% ─── INFRA ──────────────────────────────────────────────────
-    subgraph INFRA["🚂 Infrastructure · Railway"]
+    subgraph INFRA["☁️ Infrastructure · Google Cloud"]
         direction LR
-        API["API Service\nFastAPI · always-on"]
-        WORKER["Worker Service\nAPScheduler · cron"]
+        API["Cloud Run\nAPI service · scale-to-zero"]
+        JOBS["Cloud Run Jobs + Cloud Scheduler\ningest 6h · briefing 03:30 UTC"]
+        NEON["Neon\nPostgres + pgvector · free tier"]
         OBS["Observability\nLangSmith tracing\nstructlog JSON + cost logging"]
     end
 
@@ -119,7 +114,7 @@ flowchart TD
     class ING,FETCH,L1,KW,L2,CB ingestion
     class PROC,SUM,EMB,DB processing
     class RANK,SCORE,PERSIST ranking
-    class BRIEF,SEL,COMP,TG_OUT briefing
-    class RAG,WEBHOOK,QEMB,RETR,GEN,TG_REPLY rag
-    class INFRA,API,WORKER,OBS infra
+    class BRIEF,SEL,COMP,WEB_OUT briefing
+    class RAG,WEBUI,QEMB,RETR,GEN,WEB_REPLY rag
+    class INFRA,API,JOBS,NEON,OBS infra
 ```

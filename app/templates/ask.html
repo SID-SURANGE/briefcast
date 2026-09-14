@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Ask · Briefcast{% endblock %}
+{% block content %}
+  <section class="card">
+    <form method="post" action="/api/ask">
+      <input type="text" name="query" placeholder="Ask about the last 14 days of AI news…" value="{{ query }}" autofocus required>
+      <button type="submit">Ask</button>
+    </form>
+  </section>
+
+  {% if answer %}
+  <section class="card">
+    <div class="answer-body">{{ answer | safe }}</div>
+  </section>
+  {% endif %}
+{% endblock %}

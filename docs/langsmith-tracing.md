@@ -10,7 +10,7 @@
 Only the **RAG query path** is traced. Batch jobs (summariser, briefing composer) use raw `httpx` — no tracing overhead where per-call visibility is not needed.
 
 ```
-User message (Telegram)
+User query (POST /api/ask)
         ↓
   rag_pipeline  ←── root span (run_type: chain)
   ├── embed_query         ←── child span (run_type: embedding)
@@ -96,7 +96,7 @@ LANGSMITH_PROJECT=briefcast-dev
 LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com
 ```
 
-**Railway (both API and Worker services):**
+**Cloud Run (API service and both Cloud Run Jobs):**
 
 | Variable | Value |
 |---|---|
@@ -109,7 +109,7 @@ LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com
 
 ### 4. Verify
 
-Check Railway API logs for:
+Check Cloud Run API service logs for:
 ```
 responder.tracing  enabled=True  project=briefcast-dev  endpoint=https://apac.api.smith.langchain.com
 ```
@@ -157,7 +157,7 @@ These values are also logged to structlog on every `responder.done` event and ag
 | Trace only the interactive path, not batch jobs | `responder.py` only — summariser and composer use raw `httpx` |
 | Keep tracing concerns in one file | All `@traceable` wrappers in `responder.py`; underlying modules stay clean |
 | Fail silently when key is absent | `_tracing_enabled` guard; no 403 noise in local dev |
-| Bridge pydantic-settings → os.environ at import time | Force-set at module top; overrides Railway env vars with our validated config |
+| Bridge pydantic-settings → os.environ at import time | Force-set at module top; overrides platform env vars with our validated config |
 | Use `run_type` semantics | `chain`, `embedding`, `retriever`, `tool` — makes LangSmith UI grouping meaningful |
 | Log cache token breakdown | `cache_read_tokens` and `cache_write_tokens` on every `responder.done` — cost visibility without a separate dashboard |
 

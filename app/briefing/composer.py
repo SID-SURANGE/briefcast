@@ -18,7 +18,7 @@ _COST_PER_INPUT_TOKEN = 1.00 / 1_000_000
 _COST_PER_OUTPUT_TOKEN = 5.00 / 1_000_000
 
 _SYSTEM_PROMPT = (
-    "You write a daily AI briefing for Telegram using HTML formatting only. "
+    "You write a daily AI briefing for a web page using HTML formatting only. "
     "No markdown asterisks, no raw URLs, no bracket-style links, no typed separator lines.\n\n"
 
     "HEADER (output literally, substituting DATE and COUNT from the user prompt):\n"
@@ -27,26 +27,26 @@ _SYSTEM_PROMPT = (
     "BODY — group articles by company/source. Use EXACTLY this format for every group:\n\n"
     "<source_emoji> <b><u>Source Name</u></b>\n\n"
     "<b>First Article Title</b>\n"
-    "<blockquote expandable>• <i>One sentence on what it is.</i>\n"
+    "<blockquote>• <i>One sentence on what it is.</i>\n"
     "\n"
     "💡 <i>One sentence on why it matters.</i>\n"
     "\n"
     "🔗 <a href=\"URL\">Read Post</a></blockquote>\n\n"
     "<b>Second Article Title (same source)</b>\n"
-    "<blockquote expandable>• <i>One sentence on what it is.</i>\n"
+    "<blockquote>• <i>One sentence on what it is.</i>\n"
     "\n"
     "💡 <i>One sentence on why it matters.</i>\n"
     "\n"
     "🔗 <a href=\"URL\">Read Post</a></blockquote>\n\n"
     "<source_emoji> <b><u>Next Source</u></b>\n\n"
     "<b>Article Title</b>\n"
-    "<blockquote expandable>...</blockquote>\n\n"
+    "<blockquote>...</blockquote>\n\n"
     "CRITICAL RULES for the format above:\n"
     "  - ONE source header per company — never repeat it between articles from the same source.\n"
     "  - All articles from the same source follow consecutively under their single header.\n"
-    "  - Article title is OUTSIDE the blockquote — always visible. Only the detail content goes inside <blockquote expandable>.\n"
+    "  - Article title is OUTSIDE the blockquote — always visible. Only the detail content goes inside <blockquote>.\n"
     "  - One blank line between source header and first article title. One blank line between articles.\n"
-    "  - Each article's detail content is ONE <blockquote expandable> block. Do NOT nest blockquotes inside.\n"
+    "  - Each article's detail content is ONE <blockquote> block. Do NOT nest blockquotes inside.\n"
     "  - The 💡 line is plain italic text inside the blockquote — not a nested blockquote.\n"
     "  - TWO blank lines between source groups. No dashes, no dividers.\n"
     "  - Do NOT output literal placeholder text like '(blank line)' or '<source_emoji>'.\n"
@@ -139,7 +139,7 @@ def _build_user_prompt(articles: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-_TELEGRAM_INLINE_TAGS = ["b", "i", "u", "s", "code", "pre"]
+_INLINE_TAGS = ["b", "i", "u", "s", "code", "pre"]
 
 
 def close_open_tags(text: str) -> str:
@@ -147,7 +147,7 @@ def close_open_tags(text: str) -> str:
     open_tags: list[str] = []
     for m in re.finditer(r"<(/?)(\w+)[^>]*>", text):
         closing, tag = m.group(1), m.group(2).lower()
-        if tag not in _TELEGRAM_INLINE_TAGS:
+        if tag not in _INLINE_TAGS:
             continue
         if closing:
             if open_tags and open_tags[-1] == tag:
@@ -161,11 +161,10 @@ def close_open_tags(text: str) -> str:
 
 async def compose(articles: list[dict[str, Any]]) -> tuple[str, list[str], set[str]]:
     """
-    Select top articles, call Haiku to compose a Telegram-HTML briefing.
+    Select top articles, call Haiku to compose an HTML briefing.
     Returns (briefing_text, source_keys, shown_urls) where source_keys is the ordered
-    list of unique company keys in the briefing (used to build drill-down buttons) and
-    shown_urls is the set of article URLs included in the briefing (used to exclude them
-    from drill-down so only additional articles are shown).
+    list of unique company keys in the briefing and shown_urls is the set of article
+    URLs included in the briefing.
     Caller should pass articles sorted by score descending (output of ranker.rank()).
     Returns ("", [], set()) if no articles are provided.
     """

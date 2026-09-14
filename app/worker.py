@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.briefing.composer import compose
 from app.db import SessionLocal
-from app.delivery.telegram_bot import send_alert, send_briefing
 from app.ingestion.circuit_breaker import record_failure, record_success
 from app.ingestion.classifier import is_ai_relevant
 from app.ingestion.dedup import is_duplicate, l1_hash
 from app.ingestion.fetcher import fetch_arxiv, fetch_rss
 from app.models.article import Article
+from app.models.briefing import Briefing
 from app.models.source import Source
 from app.observability.logger import configure_logging
 from app.processing.embedder import embed
@@ -55,11 +55,10 @@ async def _ingest_source(source_id: int) -> int:
             log.error("worker.fetch_error", source=source.name, error=str(exc))
             record_failure(source.name, db)
             if source.circuit_breaker_state == "degraded":
-                await send_alert(
-                    f"<b>{source.name}</b> has been paused after "
-                    f"{source.consecutive_failures} failed fetches in a row.\n\n"
-                    f"It will be skipped until the source recovers. "
-                    f"Check the feed URL or source availability."
+                log.error(
+                    "worker.source_degraded",
+                    source=source.name,
+                    consecutive_failures=source.consecutive_failures,
                 )
             return 0
 
@@ -190,7 +189,7 @@ async def run_ranking() -> None:
 
 
 async def run_briefing() -> None:
-    """Select top-ranked articles, compose via Haiku, deliver via Telegram. Runs at 03:30 UTC (09:00 IST)."""
+    """Select top-ranked articles, compose via Haiku, and persist for the web digest. Runs at 03:30 UTC (09:00 IST)."""
     # 36h window: covers today's articles + 12h buffer for ingestion lag.
     # The 14-day window is for RAG only — briefing must only show fresh articles.
     cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=36)
@@ -209,13 +208,6 @@ async def run_briefing() -> None:
         )
         if not articles:
             log.warning("worker.briefing_no_articles")
-            await send_briefing(
-                "📭 <b>No new articles today</b>\n\n"
-                "Nothing fresh from your sources in the last 36 hours — "
-                "the pipeline is healthy, sources just had a quiet cycle.\n\n"
-                "Next ingestion runs every 6 hours. You can still ask questions — the 14-day corpus is available.",
-                [],
-            )
             return
 
         article_dicts = [
@@ -233,9 +225,16 @@ async def run_briefing() -> None:
             for a in articles
         ]
 
-        briefing_text, source_keys, shown_urls = await compose(article_dicts)
+        briefing_text, source_keys, _ = await compose(article_dicts)
         if briefing_text:
-            await send_briefing(briefing_text, source_keys, shown_urls)
+            db.add(
+                Briefing(
+                    html_content=briefing_text,
+                    article_count=len(article_dicts),
+                    source_keys=source_keys,
+                )
+            )
+            db.commit()
             log.info("worker.briefing_done")
     finally:
         db.close()

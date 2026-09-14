@@ -1,7 +1,7 @@
 # RAG Eval Harness
 
 > RAGAS-based evaluation of the Briefcast RAG pipeline.  
-> 4 metrics · 20 grounded Q&A pairs · online mode (hits live Railway DB)
+> 4 metrics · 20 grounded Q&A pairs · online mode (hits live production DB)
 
 ---
 
@@ -46,7 +46,7 @@ questions.json  →  embed query  →  pgvector retrieve  →  Claude Sonnet gen
 
 | Choice | Rationale |
 |---|---|
-| **Online mode** | Hits live Railway DB — evals reflect what real users experience |
+| **Online mode** | Hits live production DB — evals reflect what real users experience |
 | **Haiku as judge LLM** | Cheaper than Sonnet (~10x), sufficient for RAGAS scoring tasks |
 | **text-embedding-3-small for answer_relevancy** | RAGAS embeds the generated answer to compare with question; needs an embedding model |
 | **Corpus miss skipped** | Questions where no article clears the similarity gate (0.35) are logged but not scored — they'd penalise retrieval for a routing decision, not a RAG failure |
@@ -58,7 +58,7 @@ questions.json  →  embed query  →  pgvector retrieve  →  Claude Sonnet gen
 
 ### Prerequisites
 
-- `.env` with `DATABASE_URL` pointing at Railway Postgres (or local pgvector DB)
+- `.env` with `DATABASE_URL` pointing at Neon Postgres (or local pgvector DB)
 - Dev dependencies installed: `.venv\Scripts\pip install -e ".[dev]"`
 - DB populated — run `python scripts/run_ingestion_once.py` first if the corpus is empty
 

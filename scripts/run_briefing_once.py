@@ -1,5 +1,5 @@
 """
-Trigger a single briefing composition and Telegram delivery.
+Trigger a single briefing composition and persist it to the DB.
 Requires at least some ranked articles in the DB (run run_ranking_once.py first).
 
 Usage:
@@ -13,7 +13,7 @@ from app.worker import run_briefing
 
 async def main() -> None:
     configure_logging()
-    print("Composing and sending briefing...")
+    print("Composing and persisting briefing...")
     await run_briefing()
     print("Done.")
 

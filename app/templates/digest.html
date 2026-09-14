@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Digest · Briefcast{% endblock %}
+{% block content %}
+  <section class="card">
+    {% if briefing %}
+      <p class="meta">Published {{ briefing.published_at.strftime("%Y-%m-%d %H:%M UTC") }} · {{ briefing.article_count }} articles</p>
+      <div class="briefing-body">{{ briefing.html_content | safe }}</div>
+    {% else %}
+      <p class="empty">No briefing yet. The pipeline runs on a schedule — check back after the next ingestion cycle.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Source health</h2>
+    <table>
+      <thead>
+        <tr><th>Source</th><th>State</th><th>Consecutive failures</th><th>Last fetched</th></tr>
+      </thead>
+      <tbody>
+        {% for s in sources %}
+        <tr class="state-{{ s.circuit_breaker_state }}">
+          <td>{{ s.name }}</td>
+          <td>{{ s.circuit_breaker_state }}</td>
+          <td>{{ s.consecutive_failures }}</td>
+          <td>{{ s.last_fetched_at.strftime("%Y-%m-%d %H:%M UTC") if s.last_fetched_at else "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

@@ -44,7 +44,7 @@ _MIN_SIMILARITY: float = settings.rag_min_similarity
 
 _FORMAT_RULES = (
     "OUTPUT FORMAT — STRICT:\n"
-    "- Use Telegram HTML only. Never use Markdown.\n"
+    "- Use HTML only. Never use Markdown.\n"
     "- Bold: <b>text</b>  NOT **text**\n"
     "- Italic: <i>text</i>  NOT _text_\n"
     "- Links: <a href=\"URL\">Label</a>  NOT [Label](URL)\n"
@@ -99,7 +99,7 @@ _llm = ChatOpenAI(
 
 def _sanitise_to_html(text: str) -> str:
     """
-    Convert any residual Markdown formatting to Telegram HTML.
+    Convert any residual Markdown formatting to HTML.
     LLMs occasionally ignore format instructions — this is the safety net.
     """
     # **bold** → <b>bold</b>
@@ -161,7 +161,7 @@ async def respond(query: str) -> str:
     Prompt caching: static system prompt marked cache_control=ephemeral (5-min TTL).
     LangSmith tracing: full pipeline traced — embed, retrieve, web search, generate.
 
-    Returns Telegram-HTML formatted text with inline citations.
+    Returns HTML formatted text with inline citations.
     """
     # Step 1: embed the query (traced as child span via @traceable in embedder)
     query_embedding = await _traced_embed(query)

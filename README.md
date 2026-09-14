@@ -5,7 +5,7 @@
 <h1 align="center">📡 Briefcast</h1>
 
 <p align="center"><b>Your personal AI intelligence briefing agent.</b><br>
-Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to Telegram. Answers your follow-up questions.</p>
+Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to a web page you open. Answers your follow-up questions.</p>
 
 <p align="center">
   <img src="docs/images/repo_header.png" alt="Briefcast — personal AI intelligence briefing agent" width="100%">
@@ -16,31 +16,28 @@ Ingests the AI ecosystem. Ranks what matters. Delivers a daily briefing to Teleg
 ![PostgreSQL](https://img.shields.io/badge/pgvector-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-LCEL-1C3C3C?style=flat-square)
 ![OpenRouter](https://img.shields.io/badge/OpenRouter-LLM_Gateway-FF6B35?style=flat-square)
-![Telegram](https://img.shields.io/badge/Telegram-Bot-26A5E4?style=flat-square&logo=telegram&logoColor=white)
-![Railway](https://img.shields.io/badge/Deployed_on-Railway-0B0D0E?style=flat-square&logo=railway&logoColor=white)
+![Cloud Run](https://img.shields.io/badge/Deployed_on-Cloud_Run-4285F4?style=flat-square&logo=googlecloud&logoColor=white)
+![Neon](https://img.shields.io/badge/Postgres-Neon-00E599?style=flat-square&logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 ---
 
 ## 🧠 What it does
 
-Briefcast runs a fully automated pipeline that monitors **Google AI, Google DeepMind, OpenAI, Anthropic, Meta AI, Hugging Face, Microsoft AI, NVIDIA, and arXiv** — then delivers a curated, ranked intelligence briefing to your Telegram every morning.
+Briefcast runs a fully automated pipeline that monitors **Google AI, Google DeepMind, OpenAI, Anthropic, Meta AI, Hugging Face, Microsoft AI, NVIDIA, and arXiv** — then composes a curated, ranked intelligence briefing you read on a web page, no app to check.
 
-Ask a follow-up question directly in Telegram and it answers from a **grounded, cited 14-day rolling knowledge base** — no hallucinations, sources always shown.
+Ask a follow-up question on the same page and it answers from a **grounded, cited 14-day rolling knowledge base** — no hallucinations, sources always shown.
 
 ```
-Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
+Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Web → Answer
 ```
 
 **No scraping. No paywalls. No raw article text stored. Open source.**
 
----
-
-## 📱 Sample briefing
-
-> Real output delivered to Telegram at 09:00 IST by **@BrfCastBot**
-
-![Sample Briefcast briefing in Telegram](docs/images/Sample_brief.png)
+> Briefcast originally delivered via a Telegram bot (see [ADR 008](decisions/008-telegram-over-slack.md)).
+> That channel was replaced with a web UI — see [ADR 013](decisions/013-web-delivery-over-telegram.md)
+> for why: push notifications only work if you actually check them, and a page you can just open
+> doesn't have that failure mode.
 
 ---
 
@@ -51,10 +48,10 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 | 🥇 **Tiered source ranking** | Google AI family always surfaces first. Tier 1 → Tier 2 → arXiv. |
 | 🔁 **2-layer deduplication** | SHA-256 URL hash (O(1)) + cosine similarity to catch near-duplicates across sources. |
 | ✍️ **AI summarisation** | Gemini 2.5 Flash generates a tight 3–5 sentence summary per article. |
-| 📰 **Daily briefing** | Claude Haiku composes a top 6–8 briefing with mandatory inline citations. Tier 1 sources always represented. Delivered at 09:00 IST. |
-| 💬 **RAG query-back** | Ask anything in Telegram. Claude Sonnet answers from your 14-day corpus with citations. Tavily web search fallback on corpus miss. |
-| ⚡ **Circuit breaker** | 3 consecutive feed failures → source marked degraded → Telegram alert fires immediately. |
-| 💰 **Cost-conscious by design** | ~$2–3/month in LLM spend. Runs on a $5/month Railway instance. Total: ~$8/month. |
+| 📰 **Daily briefing** | Claude Haiku composes a top 6–8 briefing with mandatory inline citations. Tier 1 sources always represented. Composed at 09:00 IST, persisted, and rendered on `GET /`. |
+| 💬 **RAG query-back** | Ask anything on `GET /ask`. Claude Sonnet answers from your 14-day corpus with citations. Tavily web search fallback on corpus miss. |
+| ⚡ **Circuit breaker** | 3 consecutive feed failures → source marked degraded → shown on the web dashboard's source-health panel. |
+| 💰 **Cost-conscious by design** | ~$2–3/month, all of it LLM spend — Cloud Run, Cloud Scheduler, and Neon all sit inside their free tiers at this traffic volume. |
 
 ---
 
@@ -85,8 +82,9 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
                      │ 09:00 IST daily
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│  📬 Briefing → Telegram                                 │
+│  📬 Briefing → Web                                       │
 │  Claude Haiku · top 10 items · citations mandatory      │
+│  persisted to DB · rendered at GET /                    │
 └────────────────────┬────────────────────────────────────┘
                      │ on demand
                      ▼
@@ -107,17 +105,17 @@ Sources → Ingest → Deduplicate → Summarise → Rank → Brief → Answer
 | Layer | Choice | Notes |
 |---|---|---|
 | Language | Python 3.11 | Type hints enforced on all functions |
-| Web framework | FastAPI | Telegram webhook handler + `/healthz` |
-| Scheduling | APScheduler | In-process cron — no separate service needed |
+| Web framework | FastAPI + Jinja2 | Web digest, RAG query form, `/healthz` — no build step |
+| Scheduling | Cloud Scheduler + Cloud Run Jobs (prod) · APScheduler (local dev) | Same 6h/03:30 UTC cadence either way — see [ADR 014](decisions/014-cloud-run-neon-over-railway.md) |
 | ORM + migrations | SQLAlchemy 2.x + Alembic | Schema versioned from day one |
-| Vector store | pgvector (Postgres) | Single DB — metadata + vector joins in SQL |
+| Vector store | pgvector (Neon Postgres) | Single DB — metadata + vector joins in SQL |
 | Embeddings | Nomic API `nomic-embed-text-v1.5` | Free tier, 1M tokens/month, zero RAM overhead |
 | RAG chains | LangChain LCEL | LangSmith-native tracing built in |
 | LLM gateway | OpenRouter | One API key for all models — swap with one param change |
-| Delivery | python-telegram-bot ≥21 | Webhook + long-poll modes supported |
+| Delivery | FastAPI + Jinja2 web UI | `GET /` digest, `GET /ask` + `POST /api/ask` RAG query — see [ADR 013](decisions/013-web-delivery-over-telegram.md) |
 | Ingestion | feedparser + httpx | RSS/Atom + arXiv Atom API |
 | Observability | structlog (JSON) + LangSmith | Structured cost logging + full RAG trace via LangChain LCEL |
-| Deployment | Railway | API service + Worker service + Postgres |
+| Deployment | Google Cloud Run + Cloud Scheduler + Neon | Scale-to-zero API + 2 batch Jobs + free-tier Postgres |
 
 ---
 
@@ -170,29 +168,32 @@ LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com   # APAC region
 ```
 briefcast/
 ├── app/
-│   ├── main.py              # FastAPI — Telegram webhook + /healthz
-│   ├── worker.py            # APScheduler — ingestion + briefing crons
+│   ├── main.py              # FastAPI — mounts web UI router + /healthz
+│   ├── worker.py            # ingestion + briefing jobs (APScheduler locally, Cloud Run Jobs in prod)
 │   ├── config.py            # pydantic-settings — all env vars, no secrets in code
 │   ├── db.py                # SQLAlchemy engine + session
-│   ├── models/              # Article, Source (pgvector, soft-delete)
+│   ├── models/              # Article, Source, Briefing (pgvector, soft-delete)
 │   ├── ingestion/           # fetcher, dedup, classifier, circuit breaker
 │   ├── processing/          # summariser (Gemini Flash), embedder (Nomic)
 │   ├── ranking/             # weighted ranker
 │   ├── briefing/            # composer (Claude Haiku)
 │   ├── rag/                 # retriever (pgvector), responder (Claude Sonnet)
-│   ├── delivery/            # telegram_bot.py (primary), slack_bot.py (v1.5)
+│   ├── delivery/            # web.py — digest + RAG query routes (Jinja2)
+│   ├── templates/           # base.html, digest.html, ask.html
+│   ├── static/               # style.css
 │   └── observability/       # structlog setup + cost logging helpers
 ├── scripts/
 │   ├── init_db.py             # run migrations + seed sources (used by Docker Compose)
 │   ├── seed_sources.py        # seed sources with live URL verification
 │   ├── dry_run_ingestion.py   # smoke-test registry and fetcher without writing to DB
-│   ├── run_ingestion_once.py  # one-shot ingestion against live DB
+│   ├── run_ingestion_once.py  # one-shot ingestion — also the Cloud Run Job command
+│   ├── run_briefing_once.py   # one-shot briefing compose + persist — also the Cloud Run Job command
 │   ├── run_evals.py           # CLI entry for RAGAS eval harness (--limit / --ids flags)
 │   └── cost_report.py         # weekly LLM spend aggregated from logs
 ├── docs/
 │   ├── POLICY.md              # public ingestion + storage policy
 │   ├── env-setup.md           # local environment setup guide
-│   ├── railway-deployment.md  # Railway deployment walkthrough
+│   ├── gcp-deployment.md      # Cloud Run + Cloud Scheduler + Neon deployment walkthrough
 │   ├── eval-harness.md        # RAGAS eval harness — metrics, run commands, score guide
 │   ├── langsmith-tracing.md   # LangSmith tracing — setup, span architecture, best practices
 │   └── architecture.md        # full pipeline diagram (Mermaid)
@@ -203,7 +204,7 @@ briefcast/
 │   └── reports/               # generated eval reports (gitignored)
 ├── CHANGELOG.md             # keep-a-changelog format; v1.0 and v1.5 entries
 ├── alembic/                 # DB migrations (pgvector extension + full schema)
-└── tests/                   # 32 tests — dedup, ranker, retriever
+└── tests/                   # dedup, ranker, retriever
 ```
 
 ---
@@ -221,13 +222,11 @@ cd briefcast
 cp .env.example .env   # Windows: copy .env.example .env
 ```
 
-Open `.env` and fill in these four values — everything else is optional:
+Open `.env` and fill in these two values — everything else is optional:
 
 ```env
 OPENROUTER_API_KEY=sk-or-v1-...    # openrouter.ai — free account, add $5 credit
 NOMIC_API_KEY=nk-...               # atlas.nomic.ai — free tier (1M tokens/month)
-TELEGRAM_BOT_TOKEN=123456:ABC...   # create via @BotFather on Telegram
-TELEGRAM_CHAT_ID=987654321         # send /start to @userinfobot to get yours
 ```
 
 **2. Start everything**
@@ -247,15 +246,16 @@ Docker Compose will:
 GET http://localhost:8000/healthz  →  {"status": "ok"}
 ```
 
-**4. Trigger first ingestion manually**
+**4. Trigger first ingestion and briefing manually**
 
-The worker runs ingestion automatically every 6h and sends a briefing at 09:00 IST — but the DB starts empty. Run a one-off ingestion now so there's something to brief on:
+The worker runs ingestion automatically every 6h and composes a briefing at 09:00 IST — but the DB starts empty. Run these now so there's something to view:
 
 ```bash
 docker compose exec worker python scripts/run_ingestion_once.py
+docker compose exec worker python scripts/run_briefing_once.py
 ```
 
-Once articles are ingested, your Telegram bot will deliver briefings on schedule and answer questions immediately.
+Then open `http://localhost:8000/` for the digest and `http://localhost:8000/ask` to query the corpus.
 
 ---
 
@@ -270,7 +270,7 @@ python -m venv .venv
 
 # 2. Configure credentials
 copy .env.example .env
-# Fill in: OPENROUTER_API_KEY, NOMIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Fill in: OPENROUTER_API_KEY, NOMIC_API_KEY
 # Also set: DATABASE_URL=postgresql+psycopg://briefcast:briefcast@localhost:5432/briefcast
 
 # 3. Start Postgres with pgvector
@@ -289,82 +289,47 @@ docker compose up -d db
 
 ---
 
-## ☁️ Deploy on Railway
+## ☁️ Deploy on Google Cloud Run
 
-Railway runs two services from the same repo: the **API** (always-on FastAPI + Telegram webhook) and the **Worker** (APScheduler cron for ingestion + briefing). They share a Railway Postgres database.
+Compute is Cloud Run: an **API service** (FastAPI web UI, scale-to-zero — no
+webhook to keep warm now that delivery is a web page, not Telegram) plus two
+**Cloud Run Jobs** (ingestion, briefing) triggered by **Cloud Scheduler** on
+the same cadence the old in-process worker used. Postgres+pgvector is
+**Neon**, not Railway — see [ADR 014](decisions/014-cloud-run-neon-over-railway.md)
+for why. Estimated cost: **~$2–3/month**, all of it OpenRouter LLM spend —
+Cloud Run, Cloud Scheduler, and Neon all sit inside their free tiers at this
+traffic/data volume.
 
-Full walkthrough: [`docs/railway-deployment.md`](docs/railway-deployment.md)
+Full walkthrough: [`docs/gcp-deployment.md`](docs/gcp-deployment.md)
 
 ### Prerequisites
 
-- [Railway account](https://railway.app) (Hobby plan ~$5/month)
-- Telegram bot token — create one via [@BotFather](https://t.me/BotFather)
+- Google Cloud project with billing enabled + `gcloud` CLI authenticated
+- [Neon account](https://neon.com) (free tier, no credit card)
 - OpenRouter API key — [openrouter.ai](https://openrouter.ai)
 - Nomic API key — [nomic.ai](https://atlas.nomic.ai) (free tier)
 - LangSmith API key — [smith.langchain.com](https://smith.langchain.com) (free tier, optional)
 
-### Steps
+### Steps (see the full walkthrough for exact commands)
 
-**1. Provision database**
+1. **Neon** — create a project, enable pgvector (`CREATE EXTENSION IF NOT EXISTS vector;`), copy the pooled connection string as `DATABASE_URL`
+2. **Build + push** the image with `gcloud builds submit`
+3. **Deploy the API service** to Cloud Run with `--min-instances 0`
+4. **Create two Cloud Run Jobs** (`briefcast-ingest`, `briefcast-briefing`) reusing the existing `scripts/run_ingestion_once.py` / `scripts/run_briefing_once.py` as their container command
+5. **Create two Cloud Scheduler triggers** — `0 */6 * * *` (ingest) and `30 3 * * *` UTC (briefing), matching the original cadence exactly
+6. **Run migrations + seed sources** against Neon (`alembic upgrade head`, `scripts/seed_sources.py`)
+7. **Run ingestion + briefing once manually** so there's something to view before the first scheduled Job fires
+8. **Verify**: `GET /healthz`, `GET /` (digest), `GET /ask` (RAG query)
 
-Add a Railway Postgres plugin to your project. Railway injects `DATABASE_URL` automatically — the app normalises `postgresql://` → `postgresql+psycopg://` on startup.
+Environment variables — same set as local dev (`OPENROUTER_API_KEY`,
+`NOMIC_API_KEY`, `DATABASE_URL`, `DEDUP_THRESHOLD`, `TAVILY_API_KEY`,
+`LANGSMITH_*`), no Telegram vars. Prefer Secret Manager over plaintext
+`--set-env-vars` for anything sensitive.
 
-Enable the pgvector extension (one-time, run in Railway's Postgres shell):
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-**2. Deploy API service**
-
-Create a new Railway service from this repo. Set the start command:
-```
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-**3. Deploy Worker service**
-
-Create a second Railway service from the same repo. Set the start command:
-```
-python -m app.worker
-```
-
-**4. Set environment variables** (both services)
-
-```
-OPENROUTER_API_KEY=
-NOMIC_API_KEY=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=          # send /start to @userinfobot to get yours
-DEDUP_THRESHOLD=0.92
-OPENROUTER_APP_REFERER=
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=
-LANGSMITH_PROJECT=briefcast-dev
-LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-```
-
-**5. Run migrations and seed sources**
-
-Point `DATABASE_URL` at your Railway public Postgres URL, then run locally:
-```powershell
-.venv\Scripts\alembic upgrade head
-.venv\Scripts\python scripts/seed_sources.py
-```
-
-**6. Register the Telegram webhook**
-
-Replace `<TOKEN>` and `<YOUR_RAILWAY_DOMAIN>` and call this once:
-```
-https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<YOUR_RAILWAY_DOMAIN>/telegram
-```
-
-**7. Verify**
-
-```
-GET https://<your-railway-domain>/healthz  →  {"status": "ok"}
-```
-
-Trigger a manual ingestion to populate the DB, then send any message to your bot to test RAG query-back.
+> `--allow-unauthenticated` is used since this is a single-user tool with no
+> auth system — meaning `/` and `/ask` are public on the Cloud Run URL. See
+> the "Known gap" note in [`docs/gcp-deployment.md`](docs/gcp-deployment.md)
+> if that matters to you.
 
 ---
 
@@ -387,13 +352,19 @@ See [`docs/POLICY.md`](docs/POLICY.md) for the complete ingestion and storage po
 | Service | Plan | $/month |
 |---|---|---|
 | OpenRouter (Gemini Flash + Haiku + Sonnet) | Pay-as-you-go | ~$2–3 |
-| Railway (API + Worker + Postgres) | Hobby | ~$5 |
+| Cloud Run (API, scale-to-zero + 2 batch Jobs) | Free tier (2M requests, 180K vCPU-sec, 360K GiB-sec/mo) | $0 |
+| Cloud Scheduler (2 job triggers) | Free tier (3 jobs/mo per billing account) | $0 |
+| Neon (Postgres + pgvector) | Free tier (0.5GB storage, 100 CU-hours/mo, no card) | $0 |
 | Nomic embeddings | Free tier (1M tokens/month) | $0 |
 | LangSmith tracing | Developer free (5K traces/month) | $0 |
-| Telegram | Free | $0 |
-| **Total** | | **~$7–8/month** |
+| **Total** | | **~$2–3/month** |
 
-A fully automated personal AI intelligence pipeline for less than a coffee.
+A fully automated personal AI intelligence pipeline for less than a coffee —
+down from ~$7–8/month on Railway+Telegram. See
+[ADR 014](decisions/014-cloud-run-neon-over-railway.md) for the full
+reasoning, including the free-tier caveats (Neon compute suspension,
+Cloud Scheduler's account-level job limit) that keep this from being an
+unconditional $0.
 
 ---
 
@@ -412,7 +383,7 @@ A cross-cutting design FAQ covering chunking, model selection, ranking, and retr
 | [`docs/eval-harness.md`](docs/eval-harness.md) | RAGAS 4-metric eval harness — how to run, interpret scores, and when to re-evaluate |
 | [`docs/langsmith-tracing.md`](docs/langsmith-tracing.md) | LangSmith RAG tracing — setup, span architecture, prompt cache visibility, best practices |
 | [`docs/env-setup.md`](docs/env-setup.md) | Local environment setup |
-| [`docs/railway-deployment.md`](docs/railway-deployment.md) | Railway deployment walkthrough |
+| [`docs/gcp-deployment.md`](docs/gcp-deployment.md) | Cloud Run + Cloud Scheduler + Neon deployment walkthrough |
 
 | ADR | Decision |
 |---|---|
@@ -427,6 +398,8 @@ A cross-cutting design FAQ covering chunking, model selection, ranking, and retr
 | [`010`](decisions/010-prompt-caching-rag-system-prompt.md) | Prompt caching on RAG system prompt — 90% cost reduction on static token bucket at 2+ queries/window |
 | [`011`](decisions/011-single-path-query-ux.md) | Single-path query UX — no /ask or /chat commands; plain message → corpus first, web fallback |
 | [`012`](decisions/012-full-pipeline-langsmith-tracing.md) | Full LangSmith pipeline tracing via @traceable — end-to-end RAG visibility without LangChain overhead |
+| [`013`](decisions/013-web-delivery-over-telegram.md) | Web UI over Telegram — no push notification, but no dark channel either; briefings now persisted, not just piped to a bot |
+| [`014`](decisions/014-cloud-run-neon-over-railway.md) | Cloud Run + Neon over Railway — scale-to-zero compute + free-tier Postgres cut cost from ~$7–8/mo to ~$2–3/mo |
 | [`FAQ`](decisions/design-faq.md) | Deep-dive: chunking, dedup thresholds, ranking weights, retrieval k, model rationale |
 
 ---
@@ -434,10 +407,10 @@ A cross-cutting design FAQ covering chunking, model selection, ranking, and retr
 ## 🗺️ Roadmap
 
 - [x] RAG eval harness — RAGAS 4-metric harness, 20 grounded Q&A pairs, Haiku as judge
+- [x] Web delivery + GCP migration — Cloud Run + Cloud Scheduler + Neon, replacing Telegram + Railway
 - [ ] Tier 3 sources — DeepSeek, Qwen, Kimi, Mistral
 - [ ] Tier 4 newsletters — Import AI, Ahead of AI, The Gradient
 - [ ] Hybrid BM25 + vector search — measure vector baseline first
-- [ ] GCP migration path — Cloud Run + Cloud SQL, same Docker images, no code changes
 
 ---
 

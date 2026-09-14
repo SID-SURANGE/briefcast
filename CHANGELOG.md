@@ -6,6 +6,26 @@ Versions map to the project's v1 → v1.5 → v2 milestone structure.
 
 ---
 
+## [v1.6] — 2026-09-14
+
+### Changed — Web delivery, replacing Telegram
+- **Removed Telegram delivery entirely** (`app/delivery/telegram_bot.py` deleted, `python-telegram-bot` dropped) — no flag, no fallback. See ADR 013.
+- **New web UI** (`app/delivery/web.py`, Jinja2, no build step) — `GET /` renders the daily digest, `GET /ask` + `POST /api/ask` expose RAG query-back, both served from the same FastAPI app.
+- **Briefings are now persisted** — new `Briefing` model/table (migration `0003`); `run_briefing()` writes to it instead of only pushing to a bot.
+- **Source health** now shown on the web dashboard instead of pushed as a Telegram alert on circuit-breaker trips.
+- Removed `app/rag/chat_responder.py` (dead code since ADR 011 removed `/chat`).
+
+### Changed — Deployment, Railway → Google Cloud
+- **Compute**: Google Cloud Run (API, scale-to-zero) + two Cloud Run Jobs (ingest, briefing) replace the Railway API + Worker services.
+- **Scheduling**: Cloud Scheduler replaces the in-process APScheduler loop in production, on the same 6h/03:30 UTC cadence. Local `docker-compose` dev keeps APScheduler unchanged.
+- **Database**: Neon (free-tier Postgres + pgvector) replaces Railway Postgres. Fresh corpus — no data migrated (14-day rolling window refills automatically).
+- `Dockerfile` now respects Cloud Run's `$PORT` env var.
+- Estimated cost: **~$2–3/month** (down from ~$7–8/month) — see ADR 014.
+
+See ADR 013 and ADR 014 for the full reasoning.
+
+---
+
 ## [v1.5.1] — 2026-05-29
 
 ### Changed — Telegram bot UX polish

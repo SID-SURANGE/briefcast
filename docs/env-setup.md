@@ -40,27 +40,6 @@ NOMIC_API_KEY=nk-...
 
 ---
 
-### `TELEGRAM_BOT_TOKEN`
-
-The bot token is used to send daily briefings, alerts, and query-back replies to your personal Telegram chat.
-
-1. Open Telegram and search for **@BotFather**.
-2. Send `/newbot` and follow the prompts (choose any name and username).
-3. BotFather replies with a token in the format `123456789:ABCdef...`.
-4. Copy that token.
-
-**Find your personal chat ID** (needed to receive messages):
-
-1. Search for **@userinfobot** on Telegram.
-2. Send it `/start` — it replies with your numeric chat ID (e.g. `987654321`).
-3. Store it somewhere handy — you will hardcode it in `app/delivery/telegram_bot.py` or add it as a separate env var when you implement delivery.
-
-```
-TELEGRAM_BOT_TOKEN=123456789:ABCdef...
-```
-
----
-
 ### `DATABASE_URL`
 
 The Postgres connection string including credentials, host, port, and database name.
@@ -78,7 +57,7 @@ docker-compose up -d db
 alembic upgrade head
 ```
 
-**Railway (production):** Railway injects this automatically when you link a Postgres service. Copy it from **Variables** tab of your Railway project — do not set it manually there.
+**Neon (production):** copy the pooled connection string from the Neon console — it already includes `?sslmode=require`. Unlike Railway, this is not auto-injected; set it explicitly as a Cloud Run env var or secret. See [`docs/gcp-deployment.md`](gcp-deployment.md).
 
 ---
 
@@ -154,7 +133,6 @@ This value can be changed at any time without touching code — just update `.en
 # Required
 OPENROUTER_API_KEY=sk-or-v1-...
 NOMIC_API_KEY=nk-...
-TELEGRAM_BOT_TOKEN=123456789:ABCdef...
 DATABASE_URL=postgresql+psycopg://briefcast:briefcast@localhost:5432/briefcast
 
 # LangSmith
