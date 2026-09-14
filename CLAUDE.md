@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-# Briefcast — personal AI intelligence briefing agent + RAG query-back
-**CLAUDE.md · v1.4 · 2026-05-25**
+# Briefcast — personal Google AI intelligence briefing agent
+**CLAUDE.md · v2.0 · 2026-09-14**
 
 Read this fully at the start of every Claude Code session before writing any code.
 Lines marked `[VERIFY]` must be tested live before the connector is enabled.
@@ -66,8 +66,8 @@ browsable archive. RAG query-back over the corpus exists but is archived/parked,
 - Confirm live GCP deployment status (Cloud Run service + 2 Jobs + 2 Scheduler triggers + Neon) — `docs/gcp-deployment.md` has the walkthrough; this file does not track live deployment state, don't assume it's done from anything written here
 - Candidate next feature (not started): flashcards generated from digest summaries — see conversation/README roadmap, no ADR yet
 
-### Recent architectural decisions (read the ADRs, don't assume from summaries)
-ADR 013 (web UI over Telegram) → ADR 014 (Cloud Run + Neon over Railway) → ADR 015 (park RAG) → ADR 016 (Google-only sources) — these four landed across two sessions and materially changed almost every section below this point in the file. Sections further down (Delivery, Deployment, Models, Observability, File Structure) may still describe the pre-ADR-013 state in places — treat this "Current State" section and the ADRs as the source of truth over older prose elsewhere in this file until a full pass reconciles it.
+### Recent architectural decisions
+ADR 013 (web UI over Telegram) → ADR 014 (Cloud Run + Neon over Railway) → ADR 015 (park RAG) → ADR 016 (Google-only sources) — read these before touching delivery, deployment, sources, or RAG. This file was fully reconciled against them on 2026-09-14; if it drifts again, trust the ADRs over old prose here.
 
 ---
 
@@ -87,7 +87,7 @@ ADR 013 (web UI over Telegram) → ADR 014 (Cloud Run + Neon over Railway) → A
 - Write ADRs with Claude Code assistance, then correct manually — the reasoning habit is the goal
 - Use `/clear` between unrelated tasks to reset context; long mixed sessions degrade output quality
 
-**When compacting context:** always preserve the list of modified files, the current "What is built" status table, any Railway env var names, and active test commands.
+**When compacting context:** always preserve the list of modified files, the current "What is built" status table, any GCP/Neon env var names, and active test commands.
 
 ---
 
@@ -134,7 +134,8 @@ Store: URL, title, author, source name, source tier, `published_at`, Claude-gene
 embedding of our summary, relevance score, dedup hash, `storage_mode`, `deleted_at`.
 Do NOT store: original article body, excerpts beyond a headline or subheading, images.
 
-**Mode B — Abstract + metadata** (Arxiv only)
+**Mode B — Abstract + metadata** (Arxiv only — **currently dormant**, no Mode B source is active
+since arXiv was removed in ADR 016; the mechanism stays in the schema for if it's ever needed again)
 Store: everything in Mode A, PLUS the full abstract text.
 Rationale: arXiv provides open programmatic access; abstracts are designed for discovery indexing.
 Full PDF body is NOT stored — use fetch-summarise-discard if deeper processing is ever needed.
@@ -174,7 +175,7 @@ Source-level storage mode overrides must be documented in `docs/POLICY.md` and s
 
 ### Required per source
 - Respect `ETag` and `Cache-Control` — do not re-fetch unchanged feeds
-- Circuit breaker: 3 consecutive failures → mark source `degraded` → Telegram alert
+- Circuit breaker: 3 consecutive failures → mark source `degraded` → shown on the web dashboard's source-health panel (`GET /`)
 - Log every fetch: `source`, `timestamp`, `item_count`, `http_status`, `latency_ms`
 
 ---
@@ -182,36 +183,36 @@ Source-level storage mode overrides must be documented in `docs/POLICY.md` and s
 ## Architecture
 
 ```
-Sources (Tier 1 + 2 RSS/APIs — v1)
+Sources (4 Google-family RSS feeds only — ADR 016)
     ↓
-Ingestion Job (APScheduler, every 6h)
+Ingestion Job (APScheduler locally / Cloud Run Job + Cloud Scheduler in prod, every 6h)
     ├── feedparser + httpx
+    ├── LLM relevance classifier (Gemini Flash, YES/NO, fails open)
     ├── Dedup L1: URL SHA-256 hash (O(1) before any API call)
     ├── Dedup L2: cosine similarity of title embedding > DEDUP_THRESHOLD (config)
-    └── Circuit breaker per source (3-strike → degraded → Telegram alert)
+    └── Circuit breaker per source (3-strike → degraded → shown on web dashboard)
 
-Processing Job (after ingestion)
-    ├── Gemini Flash via OpenRouter: 3–5 sentence summary (Mode A)
-    │   OR abstract stored directly (Arxiv Mode B)
+Processing (after ingestion)
+    ├── Gemini Flash via OpenRouter: 3–5 sentence summary
     ├── Embed summary: nomic-embed-text-v1.5 via Nomic API (free tier, 1M tokens/month)
-    ├── Tag: source tier, topic, entity mentions, published date
     └── Write to Postgres + pgvector
 
-Ranking Job (daily, before briefing)
+Ranking Job (after every ingestion)
     └── score = (tier_weight × 0.35) + (recency × 0.35) + (novelty × 0.30)
-        Tier 1: tier_weight=1.0 | Tier 2: 0.7 | Tier 3: 0.5
+        Every remaining source is tier 1 (weight 1.0) since ADR 016 — the tier term is now
+        a constant; recency + novelty do the actual differentiating work.
 
-Briefing Job (APScheduler, 08:00 local)
-    ├── Select top 6–8 ranked items (Tier 1 always represented if available)
+Briefing Job (APScheduler locally / Cloud Run Job + Cloud Scheduler in prod, 03:30 UTC / 09:00 IST)
+    ├── Select top 8 ranked items, capped 3 per source blog (ADR 016)
     ├── Claude Haiku via OpenRouter: compose briefing — citations mandatory
-    └── python-telegram-bot: post to personal chat
+    └── Persist to `briefings` table (no external delivery — see below)
 
-Query Handler (FastAPI, always-on — Telegram webhook or polling)
-    ├── Receive Telegram message → embed query
-    ├── Metadata filter: last 14 days, optional tier filter
-    ├── pgvector search (k=10)
-    ├── Claude Sonnet (Anthropic direct or OpenRouter): grounded answer + inline citations
-    └── Reply in Telegram chat
+Web UI (FastAPI + Jinja2, Cloud Run, scale-to-zero — ADR 013)
+    ├── GET / — latest briefing (sanitized via bleach before `| safe` render) + source health
+    └── GET /archive, GET /archive/{id} — every past briefing, browsable
+
+RAG query-back — parked, not active (ADR 015). Was: embed query → pgvector search (k=10,
+14-day window) → Claude Sonnet grounded answer + citations. Code intact in `archive/rag/`.
 ```
 
 ---
@@ -224,59 +225,52 @@ Query Handler (FastAPI, always-on — Telegram webhook or polling)
 |---|---|---|---|
 | Per-article summarisation | `google/gemini-2.5-flash` | OpenRouter | Lowest hallucination rate on summarisation benchmarks. ~$0.50/M input. 1M context. |
 | Daily briefing composition | `claude-haiku-4-5` | OpenRouter | Writing quality and tone matter for daily reading. Haiku beats Gemini Flash in blind evals. $1/M input. |
-| RAG query responses | `claude-sonnet-4-6` | OpenRouter | Multi-source grounded reasoning with citation. Hallucination risk is highest here. Sonnet justified. Prompt caching enabled — see ADR 010. |
 
-**RAG prompt caching (ADR 010):**
-The static system prompt in `app/rag/responder.py` is marked `cache_control: ephemeral`.
-Anthropic caches it server-side for 5 minutes. Cache-hit queries pay $0.30/M on the system prompt
-vs $3.00/M uncached — a 90% reduction on that token bucket. Cache writes cost $3.75/M (paid once
-per 5-min window). Break-even is 2 queries per window. `cache_read_tokens` and `cache_write_tokens`
-are logged in every `responder.done` structured log line.
+`claude-sonnet-4-6` for RAG query responses, and the prompt-caching setup that went with it
+(ADR 010), are parked along with RAG itself (ADR 015) — code and rationale preserved in
+`archive/rag/` and the ADR, not deleted. Don't re-add a Sonnet call without checking whether
+RAG has actually been restored first.
 
 **Why not Gemini Flash for briefing composition:**
 In blind writing quality evaluations, Claude output is preferred ~47% of the time vs Gemini's ~24%.
 The daily briefing is the user-facing product — writing quality is not interchangeable with summarisation.
 
-**Why not local embeddings in v1:**
-`nomic-embed-text-v1.5` via `sentence-transformers` requires loading `torch` (~1.5GB RAM at runtime on Railway).
-This causes OOM risk on the Hobby plan worker service during cron. Use Nomic's free API instead.
-Local embeddings are the right v2 upgrade if you self-host or move to a memory-rich instance.
+**Why not local embeddings:**
+`nomic-embed-text-v1.5` via `sentence-transformers` requires loading `torch` (~1.5GB RAM at runtime).
+This causes OOM risk on a memory-constrained worker during cron (originally Railway Hobby;
+same constraint applies to Cloud Run's default memory allocation). Use Nomic's free API instead.
+Local embeddings are the right upgrade only if self-hosting on a memory-rich instance.
 
 ### LLM Gateway: OpenRouter (primary)
 
 OpenRouter provides a single API key and unified billing across all model providers.
 Model swaps require one parameter change — no code changes.
 
-**Env vars (all via Railway environment variables — never in source code):**
+**Env vars (set as Cloud Run env vars/secrets — never in source code):**
 ```
 OPENROUTER_API_KEY        # primary LLM gateway
 NOMIC_API_KEY             # embedding service (free tier)
-TELEGRAM_BOT_TOKEN        # delivery + alert channel
-TELEGRAM_CHAT_ID          # personal chat ID — send /start to @userinfobot to get it
-DATABASE_URL              # injected by Railway Postgres service
-LANGSMITH_API_KEY         # LangSmith tracing
-LANGSMITH_PROJECT         # e.g. "briefcast-dev"
-LANGSMITH_TRACING         # set to "true"
-LANGSMITH_ENDPOINT        # https://apac.api.smith.langchain.com (APAC) or https://api.smith.langchain.com (US)
+DATABASE_URL              # Neon pooled connection string — includes ?sslmode=require; not auto-injected, set explicitly
 DEDUP_THRESHOLD=0.92      # plain number only — pydantic-settings cannot parse inline comments
 OPENROUTER_APP_REFERER=https://github.com/SID-SURANGE/briefcast   # shown in OpenRouter dashboard
-TAVILY_API_KEY            # web search fallback (free tier: 1,000/month at app.tavily.com); leave blank to disable
-TELEGRAM_BRIEFING_THREAD_ID   # optional — Forum Topics supergroup thread ID for daily briefing; unset = main chat
-TELEGRAM_ALERT_THREAD_ID      # optional — Forum Topics supergroup thread ID for alerts; unset = main chat
 ```
+`TELEGRAM_*`, `LANGSMITH_*`, `TAVILY_API_KEY` were removed from `app/config.py` — see ADR 013 (Telegram)
+and ADR 015 (RAG/LangSmith/Tavily). Re-add only alongside restoring the feature that used them.
 
 ### Budget
 
 | Account | Plan | Cost/mo |
 |---|---|---|
-| OpenRouter | Pay-as-you-go | ~$2–3 (Gemini Flash + Haiku + Sonnet RAG) |
-| Railway | Hobby | ~$5 (API + worker + Postgres) |
-| Telegram | Free | $0 |
-| LangSmith | Developer free | $0 (5,000 traces/month) |
+| OpenRouter | Pay-as-you-go | ~$2–3 (Gemini Flash + Haiku only — no Sonnet while RAG is parked) |
+| Cloud Run (API + 2 Jobs) | Free tier | $0 |
+| Cloud Scheduler (2 triggers) | Free tier (3 jobs/mo per billing account) | $0 |
+| Neon (Postgres + pgvector) | Free tier | $0 |
 | Nomic API | Free | $0 (1M tokens/month) |
 | GitHub | Free | $0 |
 
-**App running cost: ~$7–8/month.** Claude Code (Claude.ai Pro, $20/month) is a development tool — cancel it once the app is stable. Log every API call from day one. Run `scripts/cost_report.py` weekly.
+**App running cost: ~$2–3/month** (down from ~$7–8/month on Railway+Telegram — see ADR 014).
+Claude Code (Claude.ai Pro, $20/month) is a development tool — cancel it once the app is stable.
+Log every API call from day one. Run `scripts/cost_report.py` weekly.
 
 ---
 
@@ -304,38 +298,32 @@ out or remove it explicitly; it's dead code, not a delivery option.
 
 ---
 
-## Observability (v1 — no Helicone)
+## Observability
 
-Three separate concerns. Keep them separate.
-
-### 1. LLM/RAG tracing — LangSmith
-```
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=<from smith.langchain.com>
-LANGSMITH_PROJECT=briefcast-dev
-LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com   # APAC region — change if on US plan
-```
-Free tier: 5,000 traces/month — sufficient for personal use.
-**Scope:** Only `app/rag/responder.py` uses LangChain LCEL (`_prompt | _llm`). This is the only layer where per-query trace visibility matters — seeing retrieved context + model response in one view.
-Summariser and briefing composer use raw `httpx` — no LangChain overhead on batch jobs.
-LangSmith env vars are bridged from pydantic-settings → `os.environ` at import time in `responder.py`.
-Tracing is silently disabled if `LANGSMITH_API_KEY` is empty — no 403 noise in dev.
-
-### 2. Application + cost logging — structlog (JSON only, no print())
+### 1. Application + cost logging — structlog (JSON only, no print())
 Required fields on every LLM call:
 ```python
-log.info("llm.call", model=model, task="summarise|briefing|rag",
+log.info("llm.call", model=model, task="summarise|briefing",
          input_tokens=n, output_tokens=n, latency_ms=n,
          estimated_cost_usd=n, source=source_name)
 ```
-`scripts/cost_report.py` aggregates logs and prints daily/weekly spend. Run manually weekly in v1.
+`scripts/cost_report.py` aggregates logs and prints daily/weekly spend. Run manually weekly.
 
-### 3. Infrastructure — Railway native + health check
-- `GET /healthz` → 200 (add from day 1)
-- If ingestion hasn't run in 25h → post Telegram alert
+### 2. Infrastructure — Cloud Run native + health check
+- `GET /healthz` → 200
+- Circuit-breaker degradations surface on the web dashboard's source-health panel
+  (`GET /`) — no external alert channel; check the page or Cloud Run logs directly.
 
-### v2 additions (not now)
-Langfuse or Helicone for richer cost dashboard · OpenTelemetry → Cloud Trace after GCP migration
+### LangSmith tracing — parked with RAG (ADR 015)
+LangSmith was scoped entirely to `app/rag/responder.py`'s LangChain LCEL chain — the only
+layer that ever used LangChain. It's fully removed from `app/config.py` and the active
+dependency tree. Setup instructions are preserved in `archive/rag/docs/langsmith-tracing.md`
+for when/if RAG is restored. Do not re-add `LANGSMITH_*` config without restoring the RAG
+module it traced.
+
+### Not planned
+Langfuse or Helicone for a richer cost dashboard — structlog + `cost_report.py` remains
+sufficient at this scale.
 
 ---
 
@@ -344,46 +332,47 @@ Langfuse or Helicone for richer cost dashboard · OpenTelemetry → Cloud Trace 
 | Layer | Choice | Notes |
 |---|---|---|
 | Language | Python 3.11+ | |
-| Web framework | FastAPI | Telegram webhook handler + `/healthz` |
+| Web framework | FastAPI + Jinja2 | `GET /`, `GET /archive`, `GET /archive/{id}`, `/healthz` — no build step, no JS framework |
 | ORM | SQLAlchemy 2.x + Alembic | Migrations from day 1 |
-| Scheduling | APScheduler (in-process) | No separate service needed in v1 |
-| LLM gateway | OpenRouter | Single key for all models (Gemini Flash + Haiku + Sonnet) |
-| RAG chains | LangChain LCEL only | Composable + LangSmith-native tracing |
-| Text splitting | LangChain RecursiveCharacterTextSplitter | chunk_size=800, overlap=100 |
-| Embeddings | Nomic API — `nomic-embed-text-v1.5` | Free tier (1M tokens/month). Local via sentence-transformers is v2. |
-| Vector store | pgvector in Postgres | Single DB, no separate vector service |
-| Delivery | python-telegram-bot>=21 | Webhook or long-poll mode |
-| Ingestion | feedparser + httpx | |
-| Containers | Docker + docker-compose | GCP migration path from day 1 |
+| Scheduling | APScheduler (local dev) · Cloud Run Jobs + Cloud Scheduler (prod, ADR 014) | Same 6h/03:30 UTC cadence either way |
+| LLM gateway | OpenRouter | Single key for all active models (Gemini Flash + Haiku) |
+| Embeddings | Nomic API — `nomic-embed-text-v1.5` | Free tier (1M tokens/month). Local embedding not planned — see rationale above. |
+| Vector store | pgvector in Neon Postgres | Powers L2 near-dup detection; single DB, no separate vector service |
+| Delivery | FastAPI + Jinja2 web UI | Telegram (`python-telegram-bot`) removed — ADR 013 |
+| Ingestion | feedparser + httpx | 4 Google-family RSS feeds — ADR 016 |
+| Containers | Docker + docker-compose (local) | Same image also runs as the two Cloud Run Jobs, different container command |
+| Deployment | Google Cloud Run + Cloud Scheduler + Neon | ADR 014 — `docs/gcp-deployment.md` |
 
-**Not in v1:** LangGraph · Helicone · cross-encoder reranker · hybrid BM25 ·
-query rewriting · frontend · user auth · Slack · local embedding model · Tier 3/4 sources
+**Not active:** LangChain/LangChain LCEL, RAG retrieval, RAG eval harness (RAGAS), LangSmith
+tracing, Tavily web search — all parked together in `archive/rag/`, ADR 015.
+**Not planned:** LangGraph · Helicone · cross-encoder reranker · hybrid BM25 · query rewriting ·
+user auth · Slack delivery (unwired stub exists, `app/delivery/slack_bot.py`) · non-Google
+sources (ADR 016 — this is a decision, not a gap).
 
 ---
 
-## v1 / v1.5 / v2 Decision Table
+## Decision Table (superseded by ADRs 013–016 where they conflict — trust the ADRs)
 
-| Feature | Version | Key reason |
+| Feature | Status | Key reason |
 |---|---|---|
-| Tier 1 + 2 sources | v1 | Core product |
-| Telegram delivery | v1 | Free, instant setup, personal tool fit |
-| Citations in all outputs | v1 | Non-negotiable trust signal |
-| Semantic deduplication (2-layer) | v1 | Core value proposition |
-| Metadata-filtered retrieval | v1 | RAG quality baseline |
-| Structured cost logging | v1 | Replaces Helicone |
-| OpenRouter gateway | v1 | Model flexibility + unified billing |
-| Nomic API embeddings | v1 | Free, no RAM overhead |
-| Tier 3 sources (DeepSeek, Qwen, Kimi) | v1.5 | Strategic but needs ingestion testing |
-| Tier 4 newsletters | v1.5 | Add after base pipeline is proven |
-| Eval harness (20 questions) | ✅ v1.5 done | RAGAS 4-metric harness built; run `python scripts/run_evals.py` |
-| Hybrid BM25 + vector search | v1.5 | Measure vector baseline first |
-| Cross-encoder reranker | v1.5 | Adds 100–300ms + API cost; trigger: retrieval quality feels poor after 2+ weeks |
-| Query rewriting | v1.5 | Natural LangGraph candidate once baseline is proven |
-| Slack delivery | v1.5 | Optional extension in `app/delivery/slack_bot.py` |
-| LangGraph | v2 | Justified only with real conditional branching (query agent + validator) |
-| Local embedding model | v2 | Switch from Nomic API to local when self-hosting or GCP memory allows |
-| X/Twitter connector | v2 | Expensive, optional, not core |
-| Any frontend | v2 | Backend pipeline is the product |
+| Google-only sources | ✅ shipped | ADR 016 — deliberate narrowing from 8 sources, career-alignment motivated, not "better product" |
+| Web UI delivery | ✅ shipped | ADR 013 — replaces Telegram, which nobody was checking |
+| Digest archive (`GET /archive`) | ✅ shipped | Every past briefing browsable, reuses existing `Briefing` data |
+| Citations in briefing | ✅ shipped | Non-negotiable trust signal — ADR 004 |
+| Semantic deduplication (2-layer) | ✅ shipped | Core value proposition |
+| Structured cost logging | ✅ shipped | Replaces Helicone |
+| OpenRouter gateway | ✅ shipped | Model flexibility + unified billing |
+| Nomic API embeddings | ✅ shipped | Free, no RAM overhead |
+| Cloud Run + Cloud Scheduler + Neon | ✅ shipped | ADR 014 — cost dropped ~$7–8/mo → ~$2–3/mo |
+| RAG query-back | ⏸ parked | ADR 015 — usage never measured, infra was disproportionate; code intact in `archive/rag/` |
+| RAGAS eval harness | ⏸ parked with RAG | Same ADR — only meaningful once RAG is restored |
+| Flashcards from digest content | 💡 candidate, not started | Cheaper than RAG (no vector infra), matches "recall, don't ask" usage pattern — no ADR yet |
+| Non-Google sources (Tier 2/3/4, newsletters) | ❌ rejected | ADR 016 — explicitly decided against, not merely deferred; don't re-add without the user asking |
+| Slack delivery | ❌ not planned | Unwired stub exists (`slack_bot.py`) but nothing points to building it out |
+| Hybrid BM25, cross-encoder reranker, query rewriting | ❌ moot | All were RAG-quality improvements; RAG itself is parked (ADR 015) |
+| LangGraph | ❌ not planned | No conditional branching exists to justify it, and RAG (the only place it might apply) is parked |
+| Local embedding model | ❌ not planned | RAM risk on a memory-constrained worker; Nomic API free tier is sufficient |
+| X/Twitter connector | ❌ not planned | Expensive, optional, not core |
 
 ---
 
@@ -395,72 +384,60 @@ briefcast/
 ├── docs/
 │   ├── POLICY.md               ← public ingestion + storage policy for GitHub readers
 │   ├── env-setup.md            ← local environment setup guide
-│   └── railway-deployment.md  ← Railway deployment walkthrough
+│   ├── gcp-deployment.md       ← Cloud Run + Cloud Scheduler + Neon deployment walkthrough
+│   └── architecture.md         ← full pipeline diagram (Mermaid)
 ├── README.md
 ├── docker-compose.yml
-├── Dockerfile
+├── Dockerfile                  ← CMD respects Cloud Run's $PORT
 ├── pyproject.toml
 ├── alembic/
+│   └── versions/                0001 (initial schema) · 0002 (source feed_type) · 0003 (briefings table)
 ├── app/
-│   ├── main.py                 ← FastAPI (Telegram webhook handler + /healthz)
-│   ├── worker.py               ← APScheduler entry point
-│   ├── config.py               ← all constants via pydantic-settings; no secrets in code
-│   ├── db.py                   ← SQLAlchemy engine + SessionLocal + get_db()
+│   ├── main.py                 ← FastAPI, mounts app/delivery/web.py's router + /healthz. No webhook.
+│   ├── worker.py                ← run_ingestion(), run_ranking(), run_briefing(); APScheduler entry locally
+│   ├── config.py                ← pydantic-settings; RAG/Telegram settings removed
+│   ├── db.py                    ← SQLAlchemy engine + SessionLocal + get_db(); pool_recycle for Neon
 │   ├── models/
-│   │   ├── base.py             ← DeclarativeBase
-│   │   ├── __init__.py         ← re-exports Article, Source (ensures Alembic sees all models)
-│   │   ├── article.py          ← url, title, author, source_name, source_tier,
-│   │   │                          published_at, summary, embedding, score,
-│   │   │                          dedup_hash, storage_mode, deleted_at
-│   │   └── source.py           ← source registry, tier, classification tag,
-│   │                              circuit_breaker_state, storage_mode
+│   │   ├── base.py              ← DeclarativeBase
+│   │   ├── __init__.py          ← re-exports Article, Briefing, Source
+│   │   ├── article.py           ← url, title, summary, embedding, score, dedup_hash, storage_mode, deleted_at
+│   │   ├── briefing.py          ← html_content, article_count, source_keys, published_at (no soft-delete — append-only)
+│   │   └── source.py            ← tier, classification, storage_mode, circuit_breaker_state, deleted_at
 │   ├── ingestion/
-│   │   ├── fetcher.py          ← RSS + API fetchers (feedparser + httpx)
-│   │   ├── dedup.py            ← L1 URL hash + L2 cosine (DEDUP_THRESHOLD from config)
+│   │   ├── fetcher.py           ← fetch_rss() (feedparser+httpx); fetch_arxiv() present but unused
+│   │   ├── registry.py          ← SOURCES (4 Google feeds, ADR 016); sync_sources() upserts + soft-deletes stale rows
+│   │   ├── classifier.py        ← LLM relevance filter (Gemini Flash, YES/NO, fails open)
+│   │   ├── dedup.py             ← L1 URL hash + L2 cosine (DEDUP_THRESHOLD from config)
 │   │   └── circuit_breaker.py
 │   ├── processing/
-│   │   ├── summariser.py       ← Gemini Flash via OpenRouter; respects storage_mode
-│   │   └── embedder.py         ← Nomic API client
+│   │   ├── summariser.py        ← Gemini Flash via OpenRouter
+│   │   └── embedder.py          ← Nomic API client
 │   ├── ranking/
-│   │   └── ranker.py           ← weighted scorer; tier_weight boost
+│   │   └── ranker.py            ← weighted scorer; tier term is now constant (ADR 016)
 │   ├── briefing/
-│   │   └── composer.py         ← Haiku via OpenRouter; citations mandatory
-│   ├── rag/
-│   │   ├── retriever.py        ← metadata-filtered pgvector search
-│   │   └── responder.py        ← Sonnet (direct or OpenRouter); grounded + cited
+│   │   └── composer.py          ← Haiku via OpenRouter; per-source-blog diversity cap (ADR 016)
 │   ├── delivery/
-│   │   ├── telegram_bot.py     ← primary delivery; briefings + alerts + query-back
-│   │   └── slack_bot.py        ← v1.5 extension; add here without touching core
-│   ├── connectors/
-│   │   └── twitter/            ← v2; optional; disabled unless TWITTER_BEARER_TOKEN present
+│   │   ├── web.py               ← GET /, GET /archive, GET /archive/{id}
+│   │   ├── sanitize.py          ← bleach allowlist — sanitizes LLM HTML before `| safe` render
+│   │   └── slack_bot.py         ← unwired stub, not connected to main.py/worker.py, not planned
+│   ├── templates/                base.html, digest.html (handles both live + archived view), archive.html
+│   ├── static/                   style.css
+│   ├── connectors/twitter/       ← empty stub, v2, not started
 │   └── observability/
-│       └── logger.py           ← structlog setup + cost calculation helpers
+│       └── logger.py            ← structlog setup + cost calculation helpers
 ├── scripts/
-│   ├── seed_sources.py         ← seed source registry into Postgres
-│   ├── dry_run_ingestion.py    ← smoke-test registry and fetcher without writing to DB
-│   ├── run_ingestion_once.py   ← one-shot ingestion against live DB
-│   ├── run_evals.py            ← CLI entry point for RAGAS eval harness; --limit / --ids flags
-│   └── cost_report.py          ← manual weekly cost aggregation from logs
-├── evals/                      ← RAGAS eval harness (v1.5 complete)
-│   ├── __init__.py             ← package marker
-│   ├── questions.json          ← 20 Q&A pairs with ground truths + expected sources (updated May 2026)
-│   ├── eval_runner.py          ← RAGAS 4-metric runner; Haiku judge; saves JSON reports
-│   └── reports/                ← generated eval reports (gitignored)
-├── decisions/
-│   ├── 001-pgvector-over-pinecone.md
-│   ├── 002-model-selection-cost-quality.md
-│   ├── 003-rss-only-v1-ingestion.md
-│   ├── 004-citations-mandatory.md
-│   ├── 005-google-tier1-priority.md
-│   ├── 006-storage-modes.md
-│   ├── 007-openrouter-gateway.md
-│   ├── 008-telegram-over-slack.md
-│   ├── 009-nomic-api-over-local-embedding.md
-│   └── 010-prompt-caching-rag-system-prompt.md
+│   ├── init_db.py               ← migrations + seed sources, used by docker-compose
+│   ├── seed_sources.py          ← verify feed URLs live, upsert registry into Postgres
+│   ├── dry_run_ingestion.py     ← smoke-test registry and fetcher without writing to DB
+│   ├── run_ingestion_once.py    ← one-shot ingestion — also the Cloud Run Job command
+│   ├── run_ranking_once.py      ← one-shot ranking pass over existing articles
+│   ├── run_briefing_once.py     ← one-shot compose + persist — also the Cloud Run Job command
+│   └── cost_report.py           ← manual weekly cost aggregation from logs
+├── archive/rag/                 ← parked RAG (retriever, responder, eval harness, tests) — ADR 015, restore guide in README.md there
+├── decisions/                    001 through 016 — see decisions/ dir; 013–016 are the ones that changed most of this file
 └── tests/
     ├── test_dedup.py
-    ├── test_ranker.py
-    └── test_retriever.py
+    └── test_ranker.py
 ```
 
 ---
@@ -480,27 +457,31 @@ briefcast/
 
 ## Architecture Exam Concepts
 
-Name RAG stages correctly in ADRs and code comments:
-`Ingestion → Deduplication → Chunking → Embedding → Indexing → Retrieval → Reranking (v1.5) → Generation → Evaluation (v1.5)`
+RAG stage vocabulary (historical — RAG is parked, ADR 015, but this is still the correct
+vocabulary if it's restored or discussed in an interview):
+`Ingestion → Deduplication → Chunking → Embedding → Indexing → Retrieval → Reranking → Generation → Evaluation`
 
-**Key decisions to defend:**
+**Key decisions to defend — live ones first, then parked/historical ones (still worth knowing, since
+this project's explicit goal includes career narrative, not just what's currently running):**
 
 | Decision | Defence |
 |---|---|
-| pgvector over dedicated vector DB | Single DB, metadata + vector joins in SQL, no extra infra at <1M vectors |
-| RSS/API-only ingestion in v1 | Legal clarity, stability, forces curation discipline |
+| Google-only source registry | Deliberate narrowing (ADR 016), same career-alignment motivation as the earlier tier boost, taken further — a real trade-off (loses competitor visibility), not a free win |
+| pgvector over dedicated vector DB | Single DB, metadata + vector joins in SQL, no extra infra at <1M vectors — still used for L2 dedup even with RAG parked |
+| RSS/API-only ingestion | Legal clarity, stability, forces curation discipline |
 | Gemini Flash for summarisation | Lowest hallucination rate on summarisation benchmarks, 5x cheaper than Haiku |
 | Haiku for briefing composition | Writing quality matters for daily reading; Claude preferred in blind evals |
-| Sonnet for RAG responses | Multi-source grounded reasoning with citation risk — quality is non-negotiable |
-| Nomic API over local embedding | No RAM overhead on Railway Hobby; same model, free tier, simpler ops |
-| Prompt caching on RAG system prompt | Static system prompt cached ephemeral (5-min TTL); cache reads cost 90% less than full input. Break-even at 2 queries/window. See ADR 010. |
+| Nomic API over local embedding | No RAM overhead on a memory-constrained worker; same model, free tier, simpler ops |
 | OpenRouter gateway | Single key, unified billing, model swaps without code changes |
-| Telegram over Slack | Free, instant, no OAuth, unlimited history, personal tool fit |
+| Web UI over Telegram (ADR 013) | A page you open has no "stopped checking it" failure mode; a push channel does |
+| Cloud Run + Neon over Railway (ADR 014) | Scale-to-zero once there's no webhook to keep warm; free-tier Postgres; cost dropped ~$7–8/mo → ~$2–3/mo |
 | Citations mandatory from day 1 | Groundedness is the product's primary trust signal |
-| Google Tier 1 boost | Product goal explicitly aligned with career/profile goal — defensible |
 | 2-layer dedup | O(1) hash for known URLs; cosine similarity catches near-duplicates across sources |
+| *(parked)* Sonnet for RAG responses | Multi-source grounded reasoning with citation risk — quality is non-negotiable when it's live; not running now |
+| *(parked)* Prompt caching on RAG system prompt | Cache reads cost 90% less than full input at 2+ queries/5-min window (ADR 010) — real technique, currently unused since RAG is parked |
+| *(reversed)* Telegram over Slack (ADR 008) | Was the original delivery decision; superseded by ADR 013 — good example of a decision that was right at the time and wrong later, not a mistake |
 
-**Evaluation vocabulary:**
+**Evaluation vocabulary** (RAG-era, still correct terminology if discussed):
 `retrieval recall@k` · `answer faithfulness` · `answer relevance` · `groundedness` ·
 `dedup precision` · `source freshness` · `dedup threshold calibration`
 
@@ -516,22 +497,14 @@ docker compose up -d db
 .venv\Scripts\python -m app.worker   # manual trigger for testing
 ```
 
-### Railway (v1 platform)
-- **API service:** FastAPI always-on — Telegram webhook handler + `/healthz`
-- **Worker service:** APScheduler cron — 06:00 UTC ingest, 08:00 UTC briefing
-- **DB:** Railway Postgres + `CREATE EXTENSION vector;` in first Alembic migration
-- Env vars: set in Railway dashboard — never in source code
-
-### GCP migration (future — same Docker images, no code changes)
-
-| Railway | GCP Equivalent |
-|---|---|
-| API service | Cloud Run (min-instances=1) |
-| Worker cron | Cloud Run Job + Cloud Scheduler |
-| Postgres + pgvector | Cloud SQL Postgres 15 + pgvector extension |
-| Env vars | Secret Manager |
-| Logs | Cloud Logging (automatic with Cloud Run) |
-| Docker image | Artifact Registry + Cloud Build |
+### Google Cloud (current platform — ADR 014, superseding Railway)
+- **API service:** Cloud Run, `--min-instances 0` (scale-to-zero — no webhook to keep warm since Telegram removal) — `/healthz`, `GET /`, `GET /archive*`
+- **Batch jobs:** two Cloud Run Jobs (`briefcast-ingest`, `briefcast-briefing`) reusing `scripts/run_ingestion_once.py` / `scripts/run_briefing_once.py` directly as their container command
+- **Scheduling:** Cloud Scheduler triggers the two Jobs — `0 */6 * * *` (ingest), `30 3 * * *` UTC (briefing) — replaces the in-process APScheduler loop in prod only; local docker-compose dev still uses APScheduler
+- **DB:** Neon (pgvector included, free tier) — connection string is NOT auto-injected like Railway's was; set `DATABASE_URL` explicitly as a Cloud Run env var/secret
+- Env vars: prefer Secret Manager over plaintext `--set-env-vars` for anything sensitive
+- Full walkthrough with exact `gcloud` commands: [`docs/gcp-deployment.md`](docs/gcp-deployment.md)
+- **Known gap:** `--allow-unauthenticated` means `GET /` and `GET /archive*` are public — acceptable per the explicit "no auth system" requirement (single-user tool), documented as a trade-off, not an oversight
 
 ---
 
@@ -541,15 +514,22 @@ docker compose up -d db
 - No full article body text stored in DB
 - No body excerpts beyond headline or subheading stored
 - No raw Mode C content written to DB
-- No LangGraph, Helicone, or cross-encoder reranker in v1
+- No LangGraph, Helicone, or cross-encoder reranker
 - No `print()` — structlog only
 - No type hint omissions on any function
-- No frontend or auth system in v1
+- No auth system (single-user personal tool, by design) — but note a minimal web frontend
+  (`app/delivery/web.py`, Jinja2, no build step) IS in scope now, unlike the earlier "no frontend"
+  rule this superseded (ADR 013)
 - No API key or credential in any source file
-- No new source added without: (a) URL tested live, (b) ToS reviewed, (c) classification tag assigned, (d) storage mode set
-- No Sonnet for batch per-article summarisation (wrong cost tier)
+- No new source added without: (a) URL tested live, (b) ToS reviewed, (c) classification tag
+  assigned, (d) storage mode set, (e) explicit user confirmation — the registry is Google-only
+  by decision (ADR 016), not by omission; don't "helpfully" add a source back
+- No Sonnet calls for batch per-article summarisation (wrong cost tier) — moot while RAG is
+  parked (no active Sonnet usage at all), but the rule still applies if RAG is restored
 - No X connector enabled without `TWITTER_BEARER_TOKEN` in env
-- No local embedding model loaded in v1 worker (RAM risk on Railway Hobby)
+- No local embedding model loaded in the worker (RAM risk on a memory-constrained instance)
+- Don't recreate Telegram delivery, don't re-add `LANGSMITH_*`/`TAVILY_API_KEY`/`langchain`
+  without the user explicitly asking — these are considered removals (ADR 013, ADR 015), not gaps
 
 ---
 
@@ -566,9 +546,9 @@ python -m venv .venv
 
 # 3. Copy and fill in credentials
 copy .env.example .env
-# Edit .env — set OPENROUTER_API_KEY, NOMIC_API_KEY, TELEGRAM_BOT_TOKEN,
-# DATABASE_URL, LANGSMITH_API_KEY, LANGSMITH_TRACING, LANGSMITH_PROJECT, LANGSMITH_ENDPOINT
+# Edit .env — set OPENROUTER_API_KEY, NOMIC_API_KEY, DATABASE_URL
 # DEDUP_THRESHOLD=0.92  ← set a plain number, no inline comments
+# (TELEGRAM_*/LANGSMITH_*/TAVILY_API_KEY no longer exist in app/config.py — ADR 013, ADR 015)
 
 # 4. Start Postgres (pgvector image — pulls on first run)
 docker compose up -d db
@@ -628,4 +608,4 @@ docker compose up -d db
 
 ---
 
-> **v1.1 | 2026-05-18 | Prune monthly. Every line must change Claude's behaviour or be cut.**
+> **v2.0 | 2026-09-14 | Full reconciliation pass against ADRs 013–016 (web delivery, Cloud Run + Neon, RAG parked, Google-only sources). Prune monthly. Every line must change Claude's behaviour or be cut.**
